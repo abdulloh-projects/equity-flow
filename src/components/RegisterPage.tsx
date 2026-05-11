@@ -1,35 +1,147 @@
-import { useState } from 'react';
-import { ChevronDown, ArrowLeft, Check, Eye, EyeOff, Shield, TrendingUp, Users } from 'lucide-react';
+import { useState, useRef } from "react";
+import {
+  ChevronDown,
+  ArrowLeft,
+  Check,
+  Eye,
+  EyeOff,
+  Shield,
+  TrendingUp,
+  Users,
+  Loader2,
+} from "lucide-react";
+import { authService } from "../services/authService";
 
 interface RegisterPageProps {
   onBackToHome?: () => void;
+  onNavigate?: (page: string) => void;
 }
 
-export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
+export default function RegisterPage({
+  onBackToHome,
+  onNavigate,
+}: RegisterPageProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'investor' | 'founder' | null>(null);
+  const [selectedRole, setSelectedRole] = useState<
+    "investor" | "founder" | null
+  >(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
+
+  // Additional form state
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // API state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
 
   const totalSteps = 5;
 
   const steps = [
-    { number: 1, label: 'Personal Info' },
-    { number: 2, label: 'Contact Details' },
-    { number: 3, label: 'Account Setup' },
-    { number: 4, label: 'Role Selection' },
-    { number: 5, label: 'Verification' }
+    { number: 1, label: "Personal Info" },
+    { number: 2, label: "Contact Details" },
+    { number: 3, label: "Account Setup" },
+    { number: 4, label: "Role Selection" },
+    { number: 5, label: "Verification" },
   ];
 
-  const handleNext = () => {
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) value = value.slice(-1);
+    const next = [...otpDigits];
+    next[index] = value;
+    setOtpDigits(next);
+    if (value && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleNext = async () => {
+    setError(null);
+
+    // Step 4 -> 5: register the user, then send OTP
+    if (currentStep === 4) {
+      if (!selectedRole) {
+        setError("Please select a role to continue.");
+        return;
+      }
+      setLoading(true);
+      try {
+        await authService.register({
+          email,
+          password,
+          first_name: firstName,
+          last_name: lastName,
+          role: selectedRole === "investor" ? "INVESTOR" : "FOUNDER",
+        });
+        // Send OTP after registration
+        await authService.sendOtp(email);
+        setOtpSent(true);
+        setCurrentStep(5);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Registration failed. Please try again.",
+        );
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
+  const handleCompleteRegistration = async () => {
+    const otp = otpDigits.join("");
+    if (otp.length < 6) {
+      setError("Please enter the 6-digit verification code.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await authService.verifyOtp(email, otp);
+      if (res.success) {
+        onNavigate?.("login");
+      } else {
+        setError(res.message || "Invalid verification code. Please try again.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      await authService.sendOtp(email);
+      setOtpSent(true);
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleBack = () => {
+    setError(null);
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
@@ -46,17 +158,17 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
   const passwordStrength = getPasswordStrength(password);
 
   const getPasswordStrengthColor = () => {
-    if (passwordStrength <= 25) return '#DCE3E8';
-    if (passwordStrength <= 50) return '#B38B2D';
-    if (passwordStrength <= 75) return '#3A5A7A';
-    return '#2F6F5E';
+    if (passwordStrength <= 25) return "#DCE3E8";
+    if (passwordStrength <= 50) return "#B38B2D";
+    if (passwordStrength <= 75) return "#3A5A7A";
+    return "#2F6F5E";
   };
 
   const getPasswordStrengthLabel = () => {
-    if (passwordStrength <= 25) return 'Weak';
-    if (passwordStrength <= 50) return 'Fair';
-    if (passwordStrength <= 75) return 'Good';
-    return 'Strong';
+    if (passwordStrength <= 25) return "Weak";
+    if (passwordStrength <= 50) return "Fair";
+    if (passwordStrength <= 75) return "Good";
+    return "Strong";
   };
 
   return (
@@ -79,7 +191,7 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
               </button>
 
               {/* Back to Home */}
-              <button 
+              <button
                 onClick={onBackToHome}
                 className="flex items-center gap-2 text-[#274060] hover:text-[#3A5A7A] transition-colors duration-200 font-medium"
               >
@@ -118,10 +230,10 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         <div
                           className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
                             step.number < currentStep
-                              ? 'bg-[#274060] text-white'
+                              ? "bg-[#274060] text-white"
                               : step.number === currentStep
-                              ? 'bg-[#274060] text-white ring-4 ring-[#274060] ring-opacity-30'
-                              : 'bg-[#DCE3E8] text-[#6B7A8C]'
+                                ? "bg-[#274060] text-white ring-4 ring-[#274060] ring-opacity-30"
+                                : "bg-[#DCE3E8] text-[#6B7A8C]"
                           }`}
                         >
                           {step.number < currentStep ? (
@@ -134,8 +246,8 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         <div
                           className={`text-xs mt-2 text-center transition-all duration-300 ${
                             step.number <= currentStep
-                              ? 'text-[#274060] font-semibold'
-                              : 'text-[#6B7A8C]'
+                              ? "text-[#274060] font-semibold"
+                              : "text-[#6B7A8C]"
                           }`}
                         >
                           {step.label}
@@ -146,16 +258,23 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         <div
                           className={`h-1 flex-1 mx-2 transition-all duration-300 ${
                             step.number < currentStep
-                              ? 'bg-[#274060]'
-                              : 'bg-[#DCE3E8]'
+                              ? "bg-[#274060]"
+                              : "bg-[#DCE3E8]"
                           }`}
-                          style={{ marginTop: '-24px' }}
+                          style={{ marginTop: "-24px" }}
                         ></div>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
+
+              {/* Error Banner */}
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm font-medium">{error}</p>
+                </div>
+              )}
 
               {/* Step Content */}
               <div className="min-h-[400px]">
@@ -165,7 +284,6 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Personal Information
                     </h3>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-semibold text-[#0F1720] mb-2">
@@ -174,6 +292,8 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         <input
                           type="text"
                           placeholder="Enter first name"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
                           className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"
                         />
                       </div>
@@ -184,6 +304,8 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         <input
                           type="text"
                           placeholder="Enter last name"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
                           className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"
                         />
                       </div>
@@ -225,7 +347,7 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Contact Details
                     </h3>
-                    
+
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                         Email Address
@@ -233,6 +355,8 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       <input
                         type="email"
                         placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                         className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"
                       />
                     </div>
@@ -244,13 +368,18 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       <input
                         type="tel"
                         placeholder="+1 (555) 123-4567"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
                         className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
-                        Address <span className="text-[#6B7A8C] font-normal">(Optional)</span>
+                        Address{" "}
+                        <span className="text-[#6B7A8C] font-normal">
+                          (Optional)
+                        </span>
                       </label>
                       <input
                         type="text"
@@ -267,14 +396,14 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Account Setup
                     </h3>
-                    
+
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                         Password
                       </label>
                       <div className="relative">
                         <input
-                          type={showPassword ? 'text' : 'password'}
+                          type={showPassword ? "text" : "password"}
                           placeholder="Create a strong password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
@@ -292,13 +421,18 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                           )}
                         </button>
                       </div>
-                      
+
                       {/* Password Strength Indicator */}
                       {password && (
                         <div className="mt-3">
                           <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs text-[#6B7A8C]">Password Strength</span>
-                            <span className="text-xs font-semibold" style={{ color: getPasswordStrengthColor() }}>
+                            <span className="text-xs text-[#6B7A8C]">
+                              Password Strength
+                            </span>
+                            <span
+                              className="text-xs font-semibold"
+                              style={{ color: getPasswordStrengthColor() }}
+                            >
                               {getPasswordStrengthLabel()}
                             </span>
                           </div>
@@ -307,7 +441,7 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                               className="h-full transition-all duration-300 rounded-full"
                               style={{
                                 width: `${passwordStrength}%`,
-                                backgroundColor: getPasswordStrengthColor()
+                                backgroundColor: getPasswordStrengthColor(),
                               }}
                             ></div>
                           </div>
@@ -321,13 +455,17 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       </label>
                       <div className="relative">
                         <input
-                          type={showConfirmPassword ? 'text' : 'password'}
+                          type={showConfirmPassword ? "text" : "password"}
                           placeholder="Re-enter your password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
                           className="block w-full px-4 py-3 pr-12 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"
                         />
                         <button
                           type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          onClick={() =>
+                            setShowConfirmPassword(!showConfirmPassword)
+                          }
                           className="absolute inset-y-0 right-0 pr-4 flex items-center"
                         >
                           {showConfirmPassword ? (
@@ -348,13 +486,22 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                           onChange={(e) => setAgreedToTerms(e.target.checked)}
                           className="h-4 w-4 mt-1 text-[#274060] focus:ring-[#274060] border-[#DCE3E8] rounded cursor-pointer"
                         />
-                        <label htmlFor="terms" className="ml-3 text-sm text-[#0F1720] cursor-pointer">
-                          I agree to the{' '}
-                          <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A]">
+                        <label
+                          htmlFor="terms"
+                          className="ml-3 text-sm text-[#0F1720] cursor-pointer"
+                        >
+                          I agree to the{" "}
+                          <button
+                            type="button"
+                            className="text-[#274060] font-semibold hover:text-[#3A5A7A]"
+                          >
                             Terms of Use
-                          </button>
-                          {' '}and{' '}
-                          <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A]">
+                          </button>{" "}
+                          and{" "}
+                          <button
+                            type="button"
+                            className="text-[#274060] font-semibold hover:text-[#3A5A7A]"
+                          >
                             Privacy Policy
                           </button>
                         </label>
@@ -374,24 +521,24 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         Choose how you want to use EquityFlow
                       </p>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Investor Card */}
                       <button
                         type="button"
-                        onClick={() => setSelectedRole('investor')}
+                        onClick={() => setSelectedRole("investor")}
                         className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${
-                          selectedRole === 'investor'
-                            ? 'border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg'
-                            : 'border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md'
+                          selectedRole === "investor"
+                            ? "border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg"
+                            : "border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md"
                         }`}
                       >
                         <div className="flex flex-col items-center text-center">
                           <div
                             className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                              selectedRole === 'investor'
-                                ? 'bg-[#274060]'
-                                : 'bg-[#3A5A7A]'
+                              selectedRole === "investor"
+                                ? "bg-[#274060]"
+                                : "bg-[#3A5A7A]"
                             }`}
                           >
                             <TrendingUp className="w-8 h-8 text-white" />
@@ -400,9 +547,10 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                             Investor
                           </h4>
                           <p className="text-sm text-[#6B7A8C]">
-                            I want to invest in startups and build my portfolio with verified opportunities.
+                            I want to invest in startups and build my portfolio
+                            with verified opportunities.
                           </p>
-                          {selectedRole === 'investor' && (
+                          {selectedRole === "investor" && (
                             <div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
                               <Check className="w-4 h-4 text-white" />
                             </div>
@@ -413,19 +561,19 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       {/* Startup Founder Card */}
                       <button
                         type="button"
-                        onClick={() => setSelectedRole('founder')}
+                        onClick={() => setSelectedRole("founder")}
                         className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${
-                          selectedRole === 'founder'
-                            ? 'border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg'
-                            : 'border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md'
+                          selectedRole === "founder"
+                            ? "border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg"
+                            : "border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md"
                         }`}
                       >
                         <div className="flex flex-col items-center text-center">
                           <div
                             className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
-                              selectedRole === 'founder'
-                                ? 'bg-[#274060]'
-                                : 'bg-[#172A45]'
+                              selectedRole === "founder"
+                                ? "bg-[#274060]"
+                                : "bg-[#172A45]"
                             }`}
                           >
                             <Users className="w-8 h-8 text-white" />
@@ -434,9 +582,10 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                             Startup Founder
                           </h4>
                           <p className="text-sm text-[#6B7A8C]">
-                            I want to raise funding and showcase my startup to potential investors.
+                            I want to raise funding and showcase my startup to
+                            potential investors.
                           </p>
-                          {selectedRole === 'founder' && (
+                          {selectedRole === "founder" && (
                             <div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
                               <Check className="w-4 h-4 text-white" />
                             </div>
@@ -473,9 +622,16 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                             Check your email
                           </h4>
                           <p className="text-sm text-[#6B7A8C] mb-3">
-                            We've sent a 6-digit verification code to <span className="font-semibold">your@email.com</span>
+                            We've sent a 6-digit verification code to{" "}
+                            <span className="font-semibold">
+                              {email || "your@email.com"}
+                            </span>
                           </p>
-                          <button type="button" className="text-sm text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
+                          <button
+                            type="button"
+                            onClick={handleResendOtp}
+                            className="text-sm text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200"
+                          >
                             Didn't receive it? Resend code
                           </button>
                         </div>
@@ -488,11 +644,19 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                         Enter Verification Code
                       </label>
                       <div className="flex justify-center gap-3">
-                        {[1, 2, 3, 4, 5, 6].map((index) => (
+                        {otpDigits.map((digit, index) => (
                           <input
                             key={index}
+                            ref={(el) => {
+                              otpRefs.current[index] = el;
+                            }}
                             type="text"
                             maxLength={1}
+                            value={digit}
+                            onChange={(e) =>
+                              handleOtpChange(index, e.target.value)
+                            }
+                            onKeyDown={(e) => handleOtpKeyDown(index, e)}
                             className="w-12 h-14 text-center text-xl font-semibold border-2 border-[#DCE3E8] rounded-lg focus:border-[#274060] focus:ring-2 focus:ring-[#274060] transition-all duration-200"
                             placeholder="•"
                           />
@@ -511,26 +675,46 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                   disabled={currentStep === 1}
                   className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
                     currentStep === 1
-                      ? 'bg-[#DCE3E8] text-[#6B7A8C] opacity-40 cursor-not-allowed'
-                      : 'border-2 border-[#274060] text-[#274060] hover:bg-[#274060] hover:text-white'
+                      ? "bg-[#DCE3E8] text-[#6B7A8C] opacity-40 cursor-not-allowed"
+                      : "border-2 border-[#274060] text-[#274060] hover:bg-[#274060] hover:text-white"
                   }`}
                 >
                   Back
                 </button>
                 <button
                   type="button"
-                  onClick={currentStep === totalSteps ? () => console.log('Complete registration') : handleNext}
-                  className="flex-1 py-3 px-6 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-all duration-200 shadow-lg hover:shadow-xl"
+                  onClick={
+                    currentStep === totalSteps
+                      ? handleCompleteRegistration
+                      : handleNext
+                  }
+                  disabled={loading}
+                  className="flex-1 py-3 px-6 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {currentStep === totalSteps ? 'Complete Registration' : 'Continue'}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {currentStep === totalSteps
+                        ? "Verifying..."
+                        : "Processing..."}
+                    </>
+                  ) : currentStep === totalSteps ? (
+                    "Complete Registration"
+                  ) : (
+                    "Continue"
+                  )}
                 </button>
               </div>
 
               {/* Login Link */}
               <div className="mt-6 text-center">
                 <p className="text-sm text-[#6B7A8C]">
-                  Already have an account?{' '}
-                  <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.("login")}
+                    className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200"
+                  >
                     Sign In
                   </button>
                 </p>
@@ -552,7 +736,8 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                 Where Innovation Meets Capital
               </h2>
               <p className="text-xl text-white opacity-90 leading-relaxed">
-                Join thousands of investors and founders building the future together on EquityFlow.
+                Join thousands of investors and founders building the future
+                together on EquityFlow.
               </p>
 
               {/* Abstract Fintech Shapes */}
@@ -563,8 +748,12 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       <Shield className="w-8 h-8 text-[#274060]" />
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">Verified Platform</div>
-                      <div className="text-white text-sm opacity-80">Secure & compliant</div>
+                      <div className="text-white font-semibold text-lg">
+                        Verified Platform
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Secure & compliant
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">
@@ -578,8 +767,12 @@ export default function RegisterPage({ onBackToHome }: RegisterPageProps) {
                       <TrendingUp className="w-8 h-8 text-[#274060]" />
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">Growth Potential</div>
-                      <div className="text-white text-sm opacity-80">Access high-growth startups</div>
+                      <div className="text-white font-semibold text-lg">
+                        Growth Potential
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Access high-growth startups
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">
