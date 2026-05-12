@@ -1,29 +1,142 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = RegisterPage;
 const react_1 = require("react");
 const lucide_react_1 = require("lucide-react");
-function RegisterPage({ onBackToHome }) {
+const authService_1 = require("../services/authService");
+function RegisterPage({ onBackToHome, onNavigate, }) {
     const [currentStep, setCurrentStep] = (0, react_1.useState)(1);
     const [showPassword, setShowPassword] = (0, react_1.useState)(false);
     const [showConfirmPassword, setShowConfirmPassword] = (0, react_1.useState)(false);
     const [selectedRole, setSelectedRole] = (0, react_1.useState)(null);
     const [agreedToTerms, setAgreedToTerms] = (0, react_1.useState)(false);
-    const [password, setPassword] = (0, react_1.useState)('');
+    const [password, setPassword] = (0, react_1.useState)("");
+    // Additional form state
+    const [firstName, setFirstName] = (0, react_1.useState)("");
+    const [lastName, setLastName] = (0, react_1.useState)("");
+    const [email, setEmail] = (0, react_1.useState)("");
+    const [phone, setPhone] = (0, react_1.useState)("");
+    const [confirmPassword, setConfirmPassword] = (0, react_1.useState)("");
+    const [otpDigits, setOtpDigits] = (0, react_1.useState)(["", "", "", "", "", ""]);
+    const otpRefs = (0, react_1.useRef)([]);
+    // API state
+    const [loading, setLoading] = (0, react_1.useState)(false);
+    const [error, setError] = (0, react_1.useState)(null);
+    const [otpSent, setOtpSent] = (0, react_1.useState)(false);
     const totalSteps = 5;
     const steps = [
-        { number: 1, label: 'Personal Info' },
-        { number: 2, label: 'Contact Details' },
-        { number: 3, label: 'Account Setup' },
-        { number: 4, label: 'Role Selection' },
-        { number: 5, label: 'Verification' }
+        { number: 1, label: "Personal Info" },
+        { number: 2, label: "Contact Details" },
+        { number: 3, label: "Account Setup" },
+        { number: 4, label: "Role Selection" },
+        { number: 5, label: "Verification" },
     ];
-    const handleNext = () => {
+    const handleOtpChange = (index, value) => {
+        var _a;
+        if (value.length > 1)
+            value = value.slice(-1);
+        const next = [...otpDigits];
+        next[index] = value;
+        setOtpDigits(next);
+        if (value && index < 5) {
+            (_a = otpRefs.current[index + 1]) === null || _a === void 0 ? void 0 : _a.focus();
+        }
+    };
+    const handleOtpKeyDown = (index, e) => {
+        var _a;
+        if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+            (_a = otpRefs.current[index - 1]) === null || _a === void 0 ? void 0 : _a.focus();
+        }
+    };
+    const handleNext = () => __awaiter(this, void 0, void 0, function* () {
+        setError(null);
+        // Step 4 -> 5: send OTP FIRST (before registering)
+        if (currentStep === 4) {
+            if (!selectedRole) {
+                setError("Please select a role to continue.");
+                return;
+            }
+            setLoading(true);
+            try {
+                yield authService_1.authService.sendOtp(email);
+                setOtpSent(true);
+                setCurrentStep(5);
+            }
+            catch (err) {
+                setError(err instanceof Error
+                    ? err.message
+                    : "Failed to send verification code.");
+            }
+            finally {
+                setLoading(false);
+            }
+            return;
+        }
         if (currentStep < totalSteps) {
             setCurrentStep(currentStep + 1);
         }
-    };
+    });
+    const handleCompleteRegistration = () => __awaiter(this, void 0, void 0, function* () {
+        const otp = otpDigits.join("");
+        if (otp.length < 6) {
+            setError("Please enter the 6-digit verification code.");
+            return;
+        }
+        if (!selectedRole) {
+            setError("Please select a role.");
+            return;
+        }
+        setError(null);
+        setLoading(true);
+        try {
+            // Step 1: Verify OTP
+            const otpRes = yield authService_1.authService.verifyOtp(email, otp);
+            if (!otpRes.success) {
+                setError(otpRes.message || "Invalid verification code.");
+                return;
+            }
+            // Step 2: Register the user
+            const regRes = yield authService_1.authService.register({
+                email,
+                password,
+                first_name: firstName,
+                last_name: lastName,
+                role: selectedRole === "investor" ? "INVESTOR" : "FOUNDER",
+            });
+            if (regRes.success) {
+                onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("login");
+            }
+            else {
+                setError(regRes.message || "Registration failed.");
+            }
+        }
+        catch (err) {
+            setError(err instanceof Error ? err.message : "Registration failed.");
+        }
+        finally {
+            setLoading(false);
+        }
+    });
+    const handleResendOtp = () => __awaiter(this, void 0, void 0, function* () {
+        try {
+            yield authService_1.authService.sendOtp(email);
+            setOtpSent(true);
+        }
+        catch (_a) {
+            // silently fail
+        }
+    });
     const handleBack = () => {
+        setError(null);
         if (currentStep > 1) {
             setCurrentStep(currentStep - 1);
         }
@@ -42,21 +155,21 @@ function RegisterPage({ onBackToHome }) {
     const passwordStrength = getPasswordStrength(password);
     const getPasswordStrengthColor = () => {
         if (passwordStrength <= 25)
-            return '#DCE3E8';
+            return "#DCE3E8";
         if (passwordStrength <= 50)
-            return '#B38B2D';
+            return "#B38B2D";
         if (passwordStrength <= 75)
-            return '#3A5A7A';
-        return '#2F6F5E';
+            return "#3A5A7A";
+        return "#2F6F5E";
     };
     const getPasswordStrengthLabel = () => {
         if (passwordStrength <= 25)
-            return 'Weak';
+            return "Weak";
         if (passwordStrength <= 50)
-            return 'Fair';
+            return "Fair";
         if (passwordStrength <= 75)
-            return 'Good';
-        return 'Strong';
+            return "Good";
+        return "Strong";
     };
     return (<div className="min-h-screen bg-white flex flex-col">
       {/* Top Minimal Navbar */}
@@ -110,26 +223,31 @@ function RegisterPage({ onBackToHome }) {
                       <div className="flex flex-col items-center flex-1">
                         {/* Step Circle */}
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${step.number < currentStep
-                ? 'bg-[#274060] text-white'
+                ? "bg-[#274060] text-white"
                 : step.number === currentStep
-                    ? 'bg-[#274060] text-white ring-4 ring-[#274060] ring-opacity-30'
-                    : 'bg-[#DCE3E8] text-[#6B7A8C]'}`}>
+                    ? "bg-[#274060] text-white ring-4 ring-[#274060] ring-opacity-30"
+                    : "bg-[#DCE3E8] text-[#6B7A8C]"}`}>
                           {step.number < currentStep ? (<lucide_react_1.Check className="w-5 h-5"/>) : (step.number)}
                         </div>
                         {/* Step Label */}
                         <div className={`text-xs mt-2 text-center transition-all duration-300 ${step.number <= currentStep
-                ? 'text-[#274060] font-semibold'
-                : 'text-[#6B7A8C]'}`}>
+                ? "text-[#274060] font-semibold"
+                : "text-[#6B7A8C]"}`}>
                           {step.label}
                         </div>
                       </div>
                       {/* Connecting Line */}
                       {index < steps.length - 1 && (<div className={`h-1 flex-1 mx-2 transition-all duration-300 ${step.number < currentStep
-                    ? 'bg-[#274060]'
-                    : 'bg-[#DCE3E8]'}`} style={{ marginTop: '-24px' }}></div>)}
+                    ? "bg-[#274060]"
+                    : "bg-[#DCE3E8]"}`} style={{ marginTop: "-24px" }}></div>)}
                     </div>))}
                 </div>
               </div>
+
+              {/* Error Banner */}
+              {error && (<div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm font-medium">{error}</p>
+                </div>)}
 
               {/* Step Content */}
               <div className="min-h-[400px]">
@@ -138,19 +256,18 @@ function RegisterPage({ onBackToHome }) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Personal Information
                     </h3>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                           First Name
                         </label>
-                        <input type="text" placeholder="Enter first name" className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                        <input type="text" placeholder="Enter first name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                           Last Name
                         </label>
-                        <input type="text" placeholder="Enter last name" className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                        <input type="text" placeholder="Enter last name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                       </div>
                     </div>
 
@@ -185,24 +302,27 @@ function RegisterPage({ onBackToHome }) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Contact Details
                     </h3>
-                    
+
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                         Email Address
                       </label>
-                      <input type="email" placeholder="you@example.com" className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                      <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                     </div>
 
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                         Phone Number
                       </label>
-                      <input type="tel" placeholder="+1 (555) 123-4567" className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                      <input type="tel" placeholder="+1 (555) 123-4567" value={phone} onChange={(e) => setPhone(e.target.value)} className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                     </div>
 
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
-                        Address <span className="text-[#6B7A8C] font-normal">(Optional)</span>
+                        Address{" "}
+                        <span className="text-[#6B7A8C] font-normal">
+                          (Optional)
+                        </span>
                       </label>
                       <input type="text" placeholder="Enter your address" className="block w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                     </div>
@@ -213,22 +333,24 @@ function RegisterPage({ onBackToHome }) {
                     <h3 className="text-xl font-semibold text-[#0F1720] mb-4">
                       Account Setup
                     </h3>
-                    
+
                     <div>
                       <label className="block text-sm font-semibold text-[#0F1720] mb-2">
                         Password
                       </label>
                       <div className="relative">
-                        <input type={showPassword ? 'text' : 'password'} placeholder="Create a strong password" value={password} onChange={(e) => setPassword(e.target.value)} className="block w-full px-4 py-3 pr-12 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                        <input type={showPassword ? "text" : "password"} placeholder="Create a strong password" value={password} onChange={(e) => setPassword(e.target.value)} className="block w-full px-4 py-3 pr-12 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center">
                           {showPassword ? (<lucide_react_1.EyeOff className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>) : (<lucide_react_1.Eye className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>)}
                         </button>
                       </div>
-                      
+
                       {/* Password Strength Indicator */}
                       {password && (<div className="mt-3">
                           <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs text-[#6B7A8C]">Password Strength</span>
+                            <span className="text-xs text-[#6B7A8C]">
+                              Password Strength
+                            </span>
                             <span className="text-xs font-semibold" style={{ color: getPasswordStrengthColor() }}>
                               {getPasswordStrengthLabel()}
                             </span>
@@ -236,7 +358,7 @@ function RegisterPage({ onBackToHome }) {
                           <div className="h-2 bg-[#DCE3E8] rounded-full overflow-hidden">
                             <div className="h-full transition-all duration-300 rounded-full" style={{
                     width: `${passwordStrength}%`,
-                    backgroundColor: getPasswordStrengthColor()
+                    backgroundColor: getPasswordStrengthColor(),
                 }}></div>
                           </div>
                         </div>)}
@@ -247,7 +369,7 @@ function RegisterPage({ onBackToHome }) {
                         Confirm Password
                       </label>
                       <div className="relative">
-                        <input type={showConfirmPassword ? 'text' : 'password'} placeholder="Re-enter your password" className="block w-full px-4 py-3 pr-12 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                        <input type={showConfirmPassword ? "text" : "password"} placeholder="Re-enter your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="block w-full px-4 py-3 pr-12 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                         <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center">
                           {showConfirmPassword ? (<lucide_react_1.EyeOff className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>) : (<lucide_react_1.Eye className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>)}
                         </button>
@@ -258,11 +380,11 @@ function RegisterPage({ onBackToHome }) {
                       <div className="flex items-start">
                         <input id="terms" type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="h-4 w-4 mt-1 text-[#274060] focus:ring-[#274060] border-[#DCE3E8] rounded cursor-pointer"/>
                         <label htmlFor="terms" className="ml-3 text-sm text-[#0F1720] cursor-pointer">
-                          I agree to the{' '}
+                          I agree to the{" "}
                           <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A]">
                             Terms of Use
-                          </button>
-                          {' '}and{' '}
+                          </button>{" "}
+                          and{" "}
                           <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A]">
                             Privacy Policy
                           </button>
@@ -281,47 +403,49 @@ function RegisterPage({ onBackToHome }) {
                         Choose how you want to use EquityFlow
                       </p>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Investor Card */}
-                      <button type="button" onClick={() => setSelectedRole('investor')} className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${selectedRole === 'investor'
-                ? 'border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg'
-                : 'border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md'}`}>
+                      <button type="button" onClick={() => setSelectedRole("investor")} className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${selectedRole === "investor"
+                ? "border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg"
+                : "border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md"}`}>
                         <div className="flex flex-col items-center text-center">
-                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${selectedRole === 'investor'
-                ? 'bg-[#274060]'
-                : 'bg-[#3A5A7A]'}`}>
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${selectedRole === "investor"
+                ? "bg-[#274060]"
+                : "bg-[#3A5A7A]"}`}>
                             <lucide_react_1.TrendingUp className="w-8 h-8 text-white"/>
                           </div>
                           <h4 className="text-xl font-semibold text-[#0F1720] mb-3">
                             Investor
                           </h4>
                           <p className="text-sm text-[#6B7A8C]">
-                            I want to invest in startups and build my portfolio with verified opportunities.
+                            I want to invest in startups and build my portfolio
+                            with verified opportunities.
                           </p>
-                          {selectedRole === 'investor' && (<div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
+                          {selectedRole === "investor" && (<div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
                               <lucide_react_1.Check className="w-4 h-4 text-white"/>
                             </div>)}
                         </div>
                       </button>
 
                       {/* Startup Founder Card */}
-                      <button type="button" onClick={() => setSelectedRole('founder')} className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${selectedRole === 'founder'
-                ? 'border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg'
-                : 'border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md'}`}>
+                      <button type="button" onClick={() => setSelectedRole("founder")} className={`p-6 rounded-xl border-2 transition-all duration-300 text-left ${selectedRole === "founder"
+                ? "border-[#274060] bg-[#274060] bg-opacity-5 shadow-lg"
+                : "border-[#DCE3E8] hover:border-[#3A5A7A] hover:shadow-md"}`}>
                         <div className="flex flex-col items-center text-center">
-                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${selectedRole === 'founder'
-                ? 'bg-[#274060]'
-                : 'bg-[#172A45]'}`}>
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${selectedRole === "founder"
+                ? "bg-[#274060]"
+                : "bg-[#172A45]"}`}>
                             <lucide_react_1.Users className="w-8 h-8 text-white"/>
                           </div>
                           <h4 className="text-xl font-semibold text-[#0F1720] mb-3">
                             Startup Founder
                           </h4>
                           <p className="text-sm text-[#6B7A8C]">
-                            I want to raise funding and showcase my startup to potential investors.
+                            I want to raise funding and showcase my startup to
+                            potential investors.
                           </p>
-                          {selectedRole === 'founder' && (<div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
+                          {selectedRole === "founder" && (<div className="mt-4 w-6 h-6 bg-[#274060] rounded-full flex items-center justify-center">
                               <lucide_react_1.Check className="w-4 h-4 text-white"/>
                             </div>)}
                         </div>
@@ -354,9 +478,12 @@ function RegisterPage({ onBackToHome }) {
                             Check your email
                           </h4>
                           <p className="text-sm text-[#6B7A8C] mb-3">
-                            We've sent a 6-digit verification code to <span className="font-semibold">your@email.com</span>
+                            We've sent a 6-digit verification code to{" "}
+                            <span className="font-semibold">
+                              {email || "your@email.com"}
+                            </span>
                           </p>
-                          <button type="button" className="text-sm text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
+                          <button type="button" onClick={handleResendOtp} className="text-sm text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
                             Didn't receive it? Resend code
                           </button>
                         </div>
@@ -369,7 +496,9 @@ function RegisterPage({ onBackToHome }) {
                         Enter Verification Code
                       </label>
                       <div className="flex justify-center gap-3">
-                        {[1, 2, 3, 4, 5, 6].map((index) => (<input key={index} type="text" maxLength={1} className="w-12 h-14 text-center text-xl font-semibold border-2 border-[#DCE3E8] rounded-lg focus:border-[#274060] focus:ring-2 focus:ring-[#274060] transition-all duration-200" placeholder="•"/>))}
+                        {otpDigits.map((digit, index) => (<input key={index} ref={(el) => {
+                    otpRefs.current[index] = el;
+                }} type="text" maxLength={1} value={digit} onChange={(e) => handleOtpChange(index, e.target.value)} onKeyDown={(e) => handleOtpKeyDown(index, e)} className="w-12 h-14 text-center text-xl font-semibold border-2 border-[#DCE3E8] rounded-lg focus:border-[#274060] focus:ring-2 focus:ring-[#274060] transition-all duration-200" placeholder="•"/>))}
                       </div>
                     </div>
                   </div>)}
@@ -378,20 +507,27 @@ function RegisterPage({ onBackToHome }) {
               {/* Navigation Buttons */}
               <div className="flex gap-4 mt-8 pt-8 border-t border-[#DCE3E8]">
                 <button type="button" onClick={handleBack} disabled={currentStep === 1} className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${currentStep === 1
-            ? 'bg-[#DCE3E8] text-[#6B7A8C] opacity-40 cursor-not-allowed'
-            : 'border-2 border-[#274060] text-[#274060] hover:bg-[#274060] hover:text-white'}`}>
+            ? "bg-[#DCE3E8] text-[#6B7A8C] opacity-40 cursor-not-allowed"
+            : "border-2 border-[#274060] text-[#274060] hover:bg-[#274060] hover:text-white"}`}>
                   Back
                 </button>
-                <button type="button" onClick={currentStep === totalSteps ? () => console.log('Complete registration') : handleNext} className="flex-1 py-3 px-6 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-all duration-200 shadow-lg hover:shadow-xl">
-                  {currentStep === totalSteps ? 'Complete Registration' : 'Continue'}
+                <button type="button" onClick={currentStep === totalSteps
+            ? handleCompleteRegistration
+            : handleNext} disabled={loading} className="flex-1 py-3 px-6 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {loading ? (<>
+                      <lucide_react_1.Loader2 className="w-4 h-4 animate-spin"/>
+                      {currentStep === totalSteps
+                ? "Verifying..."
+                : "Processing..."}
+                    </>) : currentStep === totalSteps ? ("Complete Registration") : ("Continue")}
                 </button>
               </div>
 
               {/* Login Link */}
               <div className="mt-6 text-center">
                 <p className="text-sm text-[#6B7A8C]">
-                  Already have an account?{' '}
-                  <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
+                  Already have an account?{" "}
+                  <button type="button" onClick={() => onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("login")} className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
                     Sign In
                   </button>
                 </p>
@@ -413,7 +549,8 @@ function RegisterPage({ onBackToHome }) {
                 Where Innovation Meets Capital
               </h2>
               <p className="text-xl text-white opacity-90 leading-relaxed">
-                Join thousands of investors and founders building the future together on EquityFlow.
+                Join thousands of investors and founders building the future
+                together on EquityFlow.
               </p>
 
               {/* Abstract Fintech Shapes */}
@@ -424,8 +561,12 @@ function RegisterPage({ onBackToHome }) {
                       <lucide_react_1.Shield className="w-8 h-8 text-[#274060]"/>
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">Verified Platform</div>
-                      <div className="text-white text-sm opacity-80">Secure & compliant</div>
+                      <div className="text-white font-semibold text-lg">
+                        Verified Platform
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Secure & compliant
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">
@@ -439,8 +580,12 @@ function RegisterPage({ onBackToHome }) {
                       <lucide_react_1.TrendingUp className="w-8 h-8 text-[#274060]"/>
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">Growth Potential</div>
-                      <div className="text-white text-sm opacity-80">Access high-growth startups</div>
+                      <div className="text-white font-semibold text-lg">
+                        Growth Potential
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Access high-growth startups
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">

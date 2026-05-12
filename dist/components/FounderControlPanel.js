@@ -1,7 +1,18 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = FounderControlPanel;
 const react_1 = require("react");
+const startupService_1 = require("../services/startupService");
+const messageService_1 = require("../services/messageService");
 const lucide_react_1 = require("lucide-react");
 function SidebarItem({ icon, label, active, onClick }) {
     return (<button onClick={onClick} className={`w-full flex items-center space-x-3 px-4 py-3 text-left transition-all duration-200 relative group cursor-pointer ${active
@@ -19,6 +30,199 @@ function SectionTitle({ title }) {
       <h3 className="text-xs font-semibold text-[#6C7A89] uppercase tracking-wider">
         {title}
       </h3>
+    </div>);
+}
+function CampaignManager({ startupId, startupName }) {
+    const [campaigns, setCampaigns] = (0, react_1.useState)([]);
+    const [loading, setLoading] = (0, react_1.useState)(true);
+    const [showForm, setShowForm] = (0, react_1.useState)(false);
+    const [form, setForm] = (0, react_1.useState)({ target_amount: 0, min_investment: 0, valuation: 0, revenue: 0, revenue_share: 0, burn_rate: 0, runway: 0, gross_margin: 0, status: 'active', deadline: '' });
+    const [saving, setSaving] = (0, react_1.useState)(false);
+    const [msg, setMsg] = (0, react_1.useState)(null);
+    const loadCampaigns = () => {
+        setLoading(true);
+        startupService_1.startupService.getCampaignsByStartup(startupId)
+            .then(res => { var _a; return setCampaigns((_a = res.campaigns) !== null && _a !== void 0 ? _a : []); })
+            .catch(() => setCampaigns([]))
+            .finally(() => setLoading(false));
+    };
+    (0, react_1.useEffect)(() => { loadCampaigns(); }, [startupId]);
+    const handleCreate = (e) => __awaiter(this, void 0, void 0, function* () {
+        e.preventDefault();
+        setMsg(null);
+        setSaving(true);
+        try {
+            const res = yield startupService_1.startupService.createCampaign(Object.assign({ startup_id: startupId }, form));
+            if (res.success) {
+                setMsg('Campaign created!');
+                setShowForm(false);
+                setForm({ target_amount: 0, min_investment: 0, valuation: 0, revenue: 0, revenue_share: 0, burn_rate: 0, runway: 0, gross_margin: 0, status: 'active', deadline: '' });
+                loadCampaigns();
+            }
+            else {
+                setMsg(res.message || 'Failed to create campaign.');
+            }
+        }
+        catch (err) {
+            setMsg(err instanceof Error ? err.message : 'Failed to create campaign.');
+        }
+        finally {
+            setSaving(false);
+        }
+    });
+    const handleDelete = (campaignId) => __awaiter(this, void 0, void 0, function* () {
+        if (!confirm('Delete this campaign?'))
+            return;
+        try {
+            yield startupService_1.startupService.deleteCampaign(campaignId);
+            loadCampaigns();
+        }
+        catch ( /* ignore */_a) { /* ignore */ }
+    });
+    return (<div className="bg-white rounded-lg border border-[#DCE3E8] shadow-sm p-6 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-[#0F1720]">Campaigns for {startupName}</h3>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-[#274060] text-white text-sm font-medium rounded-lg hover:bg-[#3A5A7A] transition-colors flex items-center gap-1">
+          <lucide_react_1.Plus className="w-4 h-4"/> {showForm ? 'Cancel' : 'New Campaign'}
+        </button>
+      </div>
+      {msg && <p className="mb-3 text-sm text-[#274060]">{msg}</p>}
+      {showForm && (<form onSubmit={handleCreate} className="mb-6 p-4 bg-[#F5F7FA] rounded-lg border border-[#DCE3E8] space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Target Amount *</label>
+              <input type="number" required min={1} value={form.target_amount || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { target_amount: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Min Investment *</label>
+              <input type="number" required min={1} value={form.min_investment || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { min_investment: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Valuation *</label>
+              <input type="number" required min={1} value={form.valuation || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { valuation: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Revenue</label>
+              <input type="number" value={form.revenue || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { revenue: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Revenue Share % *</label>
+              <input type="number" required min={0} max={100} value={form.revenue_share || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { revenue_share: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Burn Rate</label>
+              <input type="number" value={form.burn_rate || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { burn_rate: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Runway (months)</label>
+              <input type="number" value={form.runway || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { runway: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Gross Margin %</label>
+              <input type="number" value={form.gross_margin || ''} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { gross_margin: Number(e.target.value) })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Deadline *</label>
+              <input type="date" required value={form.deadline} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { deadline: e.target.value })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Status</label>
+              <select value={form.status} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { status: e.target.value })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm">
+                <option value="active">Active</option>
+                <option value="closed">Closed</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" disabled={saving} className="px-5 py-2 bg-[#274060] text-white text-sm font-medium rounded-lg hover:bg-[#3A5A7A] transition-colors disabled:opacity-60">
+            {saving ? 'Creating...' : 'Create Campaign'}
+          </button>
+        </form>)}
+      {loading ? (<p className="text-sm text-[#6B7A8C]">Loading campaigns...</p>) : campaigns.length === 0 ? (<p className="text-sm text-[#6B7A8C]">No campaigns yet. Create one to start raising funds.</p>) : (<div className="space-y-3">
+          {campaigns.map(c => (<div key={c.id} className="flex items-center justify-between p-4 bg-[#F5F7FA] rounded-lg border border-[#DCE3E8]">
+              <div>
+                <p className="font-semibold text-[#0F1720]">${c.targetAmount.toLocaleString()}</p>
+                <p className="text-xs text-[#6B7A8C]">Raised: ${c.raisedAmount.toLocaleString()} · Min: ${c.minInvestment.toLocaleString()}</p>
+                <p className="text-xs text-[#6B7A8C]">Status: <span className="font-medium">{c.status}</span> · Deadline: {c.deadline ? new Date(c.deadline).toLocaleDateString() : '-'}</p>
+              </div>
+              <button onClick={() => handleDelete(c.id)} className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors">
+                Delete
+              </button>
+            </div>))}
+        </div>)}
+    </div>);
+}
+function BankInfoManager({ startupId, startupName }) {
+    const [bankInfo, setBankInfo] = (0, react_1.useState)(null);
+    const [loading, setLoading] = (0, react_1.useState)(true);
+    const [showForm, setShowForm] = (0, react_1.useState)(false);
+    const [form, setForm] = (0, react_1.useState)({ mfo: '', account_number: '', receipant_name: '' });
+    const [saving, setSaving] = (0, react_1.useState)(false);
+    const [msg, setMsg] = (0, react_1.useState)(null);
+    const loadBankInfo = () => {
+        setLoading(true);
+        startupService_1.startupService.getCampaignsByStartup(startupId)
+            .then(() => setBankInfo(null))
+            .catch(() => { })
+            .finally(() => setLoading(false));
+    };
+    (0, react_1.useEffect)(() => { loadBankInfo(); }, [startupId]);
+    const handleSave = (e) => __awaiter(this, void 0, void 0, function* () {
+        e.preventDefault();
+        setMsg(null);
+        setSaving(true);
+        try {
+            const data = Object.assign({ startup_id: startupId }, form);
+            const res = (bankInfo === null || bankInfo === void 0 ? void 0 : bankInfo.id)
+                ? yield startupService_1.startupService.updateBankInfo(Object.assign({ bank_info_id: bankInfo.id }, data))
+                : yield startupService_1.startupService.createBankInfo(data);
+            if (res.success) {
+                setMsg((bankInfo === null || bankInfo === void 0 ? void 0 : bankInfo.id) ? 'Bank info updated!' : 'Bank info created!');
+                setShowForm(false);
+                loadBankInfo();
+            }
+            else {
+                setMsg(res.message || 'Failed to save bank info.');
+            }
+        }
+        catch (err) {
+            setMsg(err instanceof Error ? err.message : 'Failed to save bank info.');
+        }
+        finally {
+            setSaving(false);
+        }
+    });
+    return (<div className="bg-white rounded-lg border border-[#DCE3E8] shadow-sm p-6 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-[#0F1720]">Bank Info for {startupName}</h3>
+        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-[#274060] text-white text-sm font-medium rounded-lg hover:bg-[#3A5A7A] transition-colors flex items-center gap-1">
+          <lucide_react_1.Plus className="w-4 h-4"/> {showForm ? 'Cancel' : bankInfo ? 'Edit' : 'Add'}
+        </button>
+      </div>
+      {msg && <p className="mb-3 text-sm text-[#274060]">{msg}</p>}
+      {loading ? (<p className="text-sm text-[#6B7A8C]">Loading...</p>) : showForm ? (<form onSubmit={handleSave} className="space-y-3 p-4 bg-[#F5F7FA] rounded-lg border border-[#DCE3E8]">
+          <div>
+            <label className="block text-xs font-medium text-[#6B7A8C] mb-1">MFO *</label>
+            <input type="text" required value={form.mfo} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { mfo: e.target.value })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Account Number *</label>
+            <input type="text" required value={form.account_number} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { account_number: e.target.value })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#6B7A8C] mb-1">Recipient Name *</label>
+            <input type="text" required value={form.receipant_name} onChange={e => setForm(f => (Object.assign(Object.assign({}, f), { receipant_name: e.target.value })))} className="w-full px-3 py-2 border border-[#DCE3E8] rounded text-sm"/>
+          </div>
+          <button type="submit" disabled={saving} className="px-5 py-2 bg-[#274060] text-white text-sm font-medium rounded-lg hover:bg-[#3A5A7A] transition-colors disabled:opacity-60">
+            {saving ? 'Saving...' : (bankInfo === null || bankInfo === void 0 ? void 0 : bankInfo.id) ? 'Update' : 'Save'}
+          </button>
+        </form>) : bankInfo ? (<div className="p-4 bg-[#F5F7FA] rounded-lg border border-[#DCE3E8]">
+          <p className="text-sm"><span className="font-medium">MFO:</span> {bankInfo.mfo}</p>
+          <p className="text-sm"><span className="font-medium">Account:</span> {bankInfo.account_number}</p>
+          <p className="text-sm"><span className="font-medium">Recipient:</span> {bankInfo.receipant_name}</p>
+        </div>) : (<p className="text-sm text-[#6B7A8C]">No bank info added yet.</p>)}
     </div>);
 }
 function FounderControlPanel({ onNavigate }) {
@@ -42,6 +246,75 @@ function FounderControlPanel({ onNavigate }) {
     });
     const [expandedStartupRow, setExpandedStartupRow] = (0, react_1.useState)(null);
     const [expandedAISection, setExpandedAISection] = (0, react_1.useState)(null);
+    const [conversations, setConversations] = (0, react_1.useState)([]);
+    const [activeConvId, setActiveConvId] = (0, react_1.useState)(null);
+    const [convMessages, setConvMessages] = (0, react_1.useState)([]);
+    const [messageText, setMessageText] = (0, react_1.useState)('');
+    const [sendingMsg, setSendingMsg] = (0, react_1.useState)(false);
+    (0, react_1.useEffect)(() => {
+        if (activeSection === 'messages') {
+            messageService_1.messageService.getConversations().then(res => { var _a; return setConversations((_a = res.conversations) !== null && _a !== void 0 ? _a : []); }).catch(() => { });
+        }
+    }, [activeSection]);
+    (0, react_1.useEffect)(() => {
+        if (activeConvId) {
+            messageService_1.messageService.getMessages(activeConvId).then(res => { var _a; return setConvMessages((_a = res.messages) !== null && _a !== void 0 ? _a : []); }).catch(() => { });
+        }
+    }, [activeConvId]);
+    const handleSendMessage = () => __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        if (!messageText.trim() || !activeConvId)
+            return;
+        setSendingMsg(true);
+        try {
+            yield messageService_1.messageService.send({ receiver_id: '', text: messageText.trim() });
+            setMessageText('');
+            const res = yield messageService_1.messageService.getMessages(activeConvId);
+            setConvMessages((_a = res.messages) !== null && _a !== void 0 ? _a : []);
+        }
+        catch ( /* ignore */_b) { /* ignore */ }
+        finally {
+            setSendingMsg(false);
+        }
+    });
+    const [myStartups, setMyStartups] = (0, react_1.useState)([]);
+    const [createForm, setCreateForm] = (0, react_1.useState)({
+        name: '', description: '', location: '', website_url: '',
+        team_size: 0, category_id: 0, stage_id: 0, founded_at: ''
+    });
+    const [createLoading, setCreateLoading] = (0, react_1.useState)(false);
+    const [createError, setCreateError] = (0, react_1.useState)(null);
+    const [createSuccess, setCreateSuccess] = (0, react_1.useState)(null);
+    (0, react_1.useEffect)(() => {
+        startupService_1.startupService.getMyStartups()
+            .then(res => { var _a; return setMyStartups((_a = res.startups) !== null && _a !== void 0 ? _a : []); })
+            .catch(() => { });
+    }, []);
+    const handleCreateStartup = (e) => __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        e.preventDefault();
+        setCreateError(null);
+        setCreateSuccess(null);
+        setCreateLoading(true);
+        try {
+            const res = yield startupService_1.startupService.createStartup(createForm);
+            if (res.success) {
+                setCreateSuccess(res.message || 'Startup created successfully!');
+                setCreateForm({ name: '', description: '', location: '', website_url: '', team_size: 0, category_id: 0, stage_id: 0, founded_at: '' });
+                const refreshed = yield startupService_1.startupService.getMyStartups();
+                setMyStartups((_a = refreshed.startups) !== null && _a !== void 0 ? _a : []);
+            }
+            else {
+                setCreateError(res.message || 'Failed to create startup.');
+            }
+        }
+        catch (err) {
+            setCreateError(err instanceof Error ? err.message : 'Failed to create startup.');
+        }
+        finally {
+            setCreateLoading(false);
+        }
+    });
     const startups = [
         { name: 'FinFlow', industry: 'Fintech' },
         { name: 'MedLink', industry: 'HealthTech' },
@@ -1123,6 +1396,18 @@ function FounderControlPanel({ onNavigate }) {
                   </button>
                 </div>
               </div>
+
+              {/* Campaign Management */}
+              {(() => {
+                const sectionName = activeSection.replace('startup-', '');
+                const matched = myStartups.find(s => s.name.toLowerCase() === sectionName.toLowerCase());
+                if (!matched)
+                    return null;
+                return (<>
+                    <CampaignManager startupId={matched.id} startupName={matched.name}/>
+                    <BankInfoManager startupId={matched.id} startupName={matched.name}/>
+                  </>);
+            })()}
             </div>
           </>) : activeSection === 'investor-relationships' ? (<>
             {/* Investor Relationships Page - CRM Layout */}
@@ -1637,39 +1922,50 @@ function FounderControlPanel({ onNavigate }) {
 
                 {/* Chat List */}
                 <div className="flex-1 overflow-y-auto">
-                  {[
-                { name: 'Michael Chen', startup: 'FinFlow', lastMessage: 'Thanks for the updated pitch deck. The financials look promising...', time: '2h ago', unread: 2, online: true },
-                { name: 'Sarah Williams', startup: 'MedLink', lastMessage: 'I would like to schedule a call to discuss the regulatory pathway', time: '5h ago', unread: 0, online: false },
-                { name: 'David Park', startup: 'CloudSuite', lastMessage: 'Great progress on customer acquisition!', time: '1d ago', unread: 0, online: false },
-                { name: 'Emma Thompson', startup: 'FinFlow', lastMessage: 'Can you provide more details on your go-to-market strategy?', time: '2d ago', unread: 1, online: false },
-                { name: 'James Rodriguez', startup: 'TechVenture', lastMessage: 'Your team composition looks strong', time: '3d ago', unread: 0, online: false },
-            ].map((chat, index) => (<div key={index} className={`px-4 py-4 border-b border-[#DCE3E8] hover:bg-[#F5F7FA] transition-colors duration-200 cursor-pointer relative ${index === 0 ? 'bg-[#F5F7FA]' : ''}`}>
-                      {index === 0 && (<div className="absolute left-0 top-0 bottom-0 w-1 bg-[#274060]"/>)}
+                  {conversations.length > 0 ? conversations.map((conv, index) => {
+                var _a, _b;
+                return (<div key={conv.id} onClick={() => setActiveConvId(conv.id)} className={`px-4 py-4 border-b border-[#DCE3E8] hover:bg-[#F5F7FA] transition-colors duration-200 cursor-pointer relative ${activeConvId === conv.id ? 'bg-[#F5F7FA]' : ''}`}>
+                      {activeConvId === conv.id && (<div className="absolute left-0 top-0 bottom-0 w-1 bg-[#274060]"/>)}
                       <div className="flex items-start space-x-3">
-                        {/* Avatar */}
                         <div className="relative flex-shrink-0">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-sm">
-                            {chat.name.split(' ').map(n => n[0]).join('')}
+                            {((_a = conv.participants.filter(p => p !== 'current')[0]) === null || _a === void 0 ? void 0 : _a.substring(0, 2).toUpperCase()) || '??'}
                           </div>
-                          {chat.online && (<div className="absolute bottom-0 right-0 w-3 h-3 bg-[#2F6F5E] border-2 border-white rounded-full"></div>)}
                         </div>
-
-                        {/* Chat Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-semibold text-[#0F1720] text-sm">{chat.name}</h4>
-                            <span className="text-xs text-[#6B7A8C]">{chat.time}</span>
+                            <h4 className="font-semibold text-[#0F1720] text-sm">
+                              {((_b = conv.participants.filter(p => p !== 'current')[0]) === null || _b === void 0 ? void 0 : _b.substring(0, 8)) || 'Conversation'}
+                            </h4>
                           </div>
-                          <p className="text-xs text-[#6B7A8C] mb-1">{chat.startup}</p>
-                          <p className="text-sm text-[#6B7A8C] truncate">{chat.lastMessage}</p>
+                          <p className="text-sm text-[#6B7A8C] truncate">{conv.last_message || `${conv.messages_count} messages`}</p>
                         </div>
-
-                        {/* Unread Badge */}
-                        {chat.unread > 0 && (<div className="flex-shrink-0 w-5 h-5 bg-[#274060] text-white rounded-full flex items-center justify-center text-xs font-semibold">
-                            {chat.unread}
-                          </div>)}
                       </div>
-                    </div>))}
+                    </div>);
+            }) : (<>
+                      <div className="px-4 py-3 bg-[#F5F7FA] border-b border-[#DCE3E8]">
+                        <p className="text-xs text-[#6B7A8C] font-medium">No conversations yet</p>
+                      </div>
+                      {[
+                    { name: 'Michael Chen', startup: 'FinFlow', lastMessage: 'Thanks for the updated pitch deck...', time: '2h ago', unread: 2 },
+                    { name: 'Sarah Williams', startup: 'MedLink', lastMessage: 'I would like to schedule a call...', time: '5h ago', unread: 0 },
+                ].map((chat, index) => (<div key={index} className="px-4 py-4 border-b border-[#DCE3E8] hover:bg-[#F5F7FA] transition-colors cursor-pointer">
+                          <div className="flex items-start space-x-3">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-sm">
+                              {chat.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-semibold text-[#0F1720] text-sm">{chat.name}</h4>
+                                <span className="text-xs text-[#6B7A8C]">{chat.time}</span>
+                              </div>
+                              <p className="text-xs text-[#6B7A8C] mb-1">{chat.startup}</p>
+                              <p className="text-sm text-[#6B7A8C] truncate">{chat.lastMessage}</p>
+                            </div>
+                            {chat.unread > 0 && (<div className="w-5 h-5 bg-[#274060] text-white rounded-full flex items-center justify-center text-xs font-semibold">{chat.unread}</div>)}
+                          </div>
+                        </div>))}
+                    </>)}
                 </div>
               </div>
 
@@ -1702,98 +1998,113 @@ function FounderControlPanel({ onNavigate }) {
 
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                  {/* Date Label */}
-                  <div className="flex items-center justify-center">
-                    <span className="px-3 py-1 bg-white rounded-full text-xs text-[#6B7A8C] border border-[#DCE3E8]">Today</span>
-                  </div>
-
-                  {/* Investor Message */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-                      MC
-                    </div>
-                    <div className="max-w-[70%]">
-                      <div className="bg-white border border-[#DCE3E8] rounded-lg px-4 py-3">
-                        <p className="text-sm text-[#0F1720]">Hi! I reviewed your pitch deck for FinFlow. The financials look solid, especially your revenue projections.</p>
+                  {convMessages.length > 0 ? (<>
+                      <div className="flex items-center justify-center">
+                        <span className="px-3 py-1 bg-white rounded-full text-xs text-[#6B7A8C] border border-[#DCE3E8]">Today</span>
                       </div>
-                      <p className="text-xs text-[#6B7A8C] mt-1 ml-1">10:24 AM</p>
-                    </div>
-                  </div>
-
-                  {/* Investor Message 2 */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-                      MC
-                    </div>
-                    <div className="max-w-[70%]">
-                      <div className="bg-white border border-[#DCE3E8] rounded-lg px-4 py-3">
-                        <p className="text-sm text-[#0F1720]">I would like to schedule a call next week to discuss your go-to-market strategy in more detail.</p>
-                      </div>
-                      <p className="text-xs text-[#6B7A8C] mt-1 ml-1">10:26 AM</p>
-                    </div>
-                  </div>
-
-                  {/* Founder Message (You) */}
-                  <div className="flex items-end justify-end space-x-3">
-                    <div className="max-w-[70%]">
-                      <div className="bg-[#274060] rounded-lg px-4 py-3">
-                        <p className="text-sm text-white">Thank you for reviewing! I would be happy to discuss our go-to-market strategy. I am available Tuesday or Thursday afternoon.</p>
-                      </div>
-                      <p className="text-xs text-[#6B7A8C] mt-1 mr-1 text-right">10:30 AM</p>
-                    </div>
-                  </div>
-
-                  {/* Founder Message 2 */}
-                  <div className="flex items-end justify-end space-x-3">
-                    <div className="max-w-[70%]">
-                      <div className="bg-[#274060] rounded-lg px-4 py-3">
-                        <p className="text-sm text-white">I can also send you our updated customer acquisition metrics if that would be helpful.</p>
-                      </div>
-                      <p className="text-xs text-[#6B7A8C] mt-1 mr-1 text-right">10:31 AM</p>
-                    </div>
-                  </div>
-
-                  {/* Typing Indicator */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-                      MC
-                    </div>
-                    <div className="bg-white border border-[#DCE3E8] rounded-lg px-4 py-3">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-2 h-2 bg-[#6B7A8C] rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-[#6B7A8C] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                        <div className="w-2 h-2 bg-[#6B7A8C] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                      </div>
-                    </div>
-                  </div>
+                      {convMessages.map((msg) => (<div key={msg.id} className={`flex items-start ${msg.sender_id === 'current' ? 'justify-end' : ''} space-x-3`}>
+                          {msg.sender_id !== 'current' && (<div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#3A5A7A] to-[#274060] flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
+                              {msg.sender_id.substring(0, 2).toUpperCase()}
+                            </div>)}
+                          <div className={`max-w-[70%] ${msg.sender_id === 'current' ? 'order-1' : ''}`}>
+                            <div className={`rounded-lg px-4 py-3 ${msg.sender_id === 'current' ? 'bg-[#274060] text-white' : 'bg-white border border-[#DCE3E8] text-[#0F1720]'}`}>
+                              <p className="text-sm">{msg.text}</p>
+                            </div>
+                            <p className="text-xs text-[#6B7A8C] mt-1 ml-1">
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>))}
+                    </>) : (<div className="flex items-center justify-center h-full">
+                      <p className="text-[#6B7A8C] text-sm">Select a conversation to view messages</p>
+                    </div>)}
                 </div>
 
                 {/* Input Area */}
                 <div className="bg-white border-t border-[#DCE3E8] px-6 py-4">
-                  {/* AI Suggest Reply Button */}
-                  <div className="mb-3">
-                    <button className="px-3 py-1.5 text-xs font-medium text-[#274060] border border-[#274060] rounded-lg hover:bg-[#F5F7FA] transition-colors duration-200 cursor-pointer">
-                      AI Suggest Reply
-                    </button>
-                  </div>
-                  
-                  {/* Input Box */}
                   <div className="flex items-center space-x-3">
-                    {/* Attachment Button */}
-                    <button className="p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors duration-200">
-                      <lucide_react_1.Upload className="w-5 h-5 text-[#6B7A8C]"/>
-                    </button>
-
-                    {/* Text Input */}
-                    <input type="text" placeholder="Write a message…" className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#DCE3E8] rounded-lg text-sm text-[#0F1720] placeholder-[#6B7A8C] focus:outline-none focus:border-[#274060] transition-colors duration-200"/>
-
-                    {/* Send Button */}
-                    <button className="p-3 bg-[#274060] hover:bg-[#3A5A7A] rounded-lg transition-colors duration-200 cursor-pointer">
+                    <input type="text" value={messageText} onChange={e => setMessageText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        } }} placeholder={activeConvId ? "Write a message…" : "Select a conversation first"} disabled={!activeConvId} className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#DCE3E8] rounded-lg text-sm text-[#0F1720] placeholder-[#6B7A8C] focus:outline-none focus:border-[#274060] transition-colors duration-200"/>
+                    <button onClick={handleSendMessage} disabled={sendingMsg || !activeConvId || !messageText.trim()} className="p-3 bg-[#274060] hover:bg-[#3A5A7A] rounded-lg transition-colors disabled:opacity-50 cursor-pointer">
                       <lucide_react_1.MessageSquare className="w-5 h-5 text-white"/>
                     </button>
                   </div>
                 </div>
               </div>
+            </div>
+          </>) : activeSection === 'create-startup' ? (<>
+            <header className="bg-white border-b border-[#DCE3E8] px-8 py-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold text-[#0F1720]">Create New Startup</h2>
+                  <p className="text-sm text-[#6B7A8C] mt-1">Register your startup on EquityFlow to start raising funds.</p>
+                </div>
+              </div>
+            </header>
+            <div className="p-8 max-w-2xl">
+              {createSuccess && (<div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-green-700 text-sm font-medium">{createSuccess}</p>
+                </div>)}
+              {createError && (<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm font-medium">{createError}</p>
+                </div>)}
+              <form onSubmit={handleCreateStartup} className="bg-white rounded-xl border border-[#DCE3E8] shadow-sm p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F1720] mb-2">Startup Name *</label>
+                  <input type="text" required value={createForm.name} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { name: e.target.value })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="e.g. FinFlow"/>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F1720] mb-2">Description *</label>
+                  <textarea required value={createForm.description} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { description: e.target.value })))} rows={4} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="Describe your startup..."/>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Location *</label>
+                    <input type="text" required value={createForm.location} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { location: e.target.value })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="e.g. San Francisco, CA"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Website URL</label>
+                    <input type="url" value={createForm.website_url} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { website_url: e.target.value })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="https://example.com"/>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Team Size *</label>
+                    <input type="number" required min={1} value={createForm.team_size || ''} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { team_size: parseInt(e.target.value) || 0 })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="e.g. 10"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Category ID *</label>
+                    <input type="number" required min={1} value={createForm.category_id || ''} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { category_id: parseInt(e.target.value) || 0 })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="e.g. 1"/>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Stage ID *</label>
+                    <input type="number" required min={1} value={createForm.stage_id || ''} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { stage_id: parseInt(e.target.value) || 0 })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" placeholder="e.g. 1"/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#0F1720] mb-2">Founded Date *</label>
+                  <input type="date" required value={createForm.founded_at} onChange={e => setCreateForm(f => (Object.assign(Object.assign({}, f), { founded_at: e.target.value })))} className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]"/>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <button type="submit" disabled={createLoading} className="px-6 py-3 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
+                    {createLoading ? 'Creating...' : 'Create Startup'}
+                  </button>
+                  <button type="button" onClick={() => setActiveSection('dashboard-overview')} className="px-6 py-3 border border-[#DCE3E8] text-[#0F1720] font-medium rounded-lg hover:bg-[#F5F7FA] transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+              {myStartups.length > 0 && (<div className="mt-8 bg-white rounded-xl border border-[#DCE3E8] shadow-sm p-6">
+                  <h3 className="text-lg font-semibold text-[#0F1720] mb-4">Your Existing Startups</h3>
+                  <div className="space-y-2">
+                    {myStartups.map(s => (<div key={s.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-[#F5F7FA]">
+                        <span className="font-medium text-[#0F1720]">{s.name}</span>
+                        <button onClick={() => setActiveSection(`startup-${s.name.toLowerCase()}`)} className="text-sm text-[#274060] hover:text-[#3A5A7A] font-medium">View</button>
+                      </div>))}
+                  </div>
+                </div>)}
             </div>
           </>) : (<>
             {/* Dashboard Overview Page Header */}

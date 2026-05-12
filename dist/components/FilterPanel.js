@@ -20,6 +20,22 @@ function FilterPanel({ onFilterChange, viewMode, onViewModeChange }) {
         { value: 'closing-soon', label: 'Closing Soon' },
         { value: 'highest-growth', label: 'Highest Growth' }
     ];
+    (0, react_1.useEffect)(() => {
+        const f = {};
+        if (searchQuery)
+            f.search = searchQuery;
+        if (industry)
+            f.industry = industry;
+        if (fundingStage)
+            f.stage = fundingStage;
+        if (location)
+            f.location = location;
+        if (minInvestment)
+            f.min_investment = minInvestment;
+        if (sortBy)
+            f.sort_by = sortBy;
+        onFilterChange(f);
+    }, [searchQuery, industry, fundingStage, location, minInvestment, sortBy]);
     const handleClearFilters = () => {
         setSearchQuery('');
         setIndustry('');
@@ -27,7 +43,6 @@ function FilterPanel({ onFilterChange, viewMode, onViewModeChange }) {
         setLocation('');
         setMinInvestment('');
         setSortBy('newest');
-        onFilterChange({});
     };
     return (<div className="bg-white border-b border-[#DCE3E8] shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

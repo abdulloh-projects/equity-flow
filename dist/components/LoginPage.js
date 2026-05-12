@@ -1,12 +1,121 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = LoginPage;
 const react_1 = require("react");
 const lucide_react_1 = require("lucide-react");
-function LoginPage({ onBackToHome }) {
+const authService_1 = require("../services/authService");
+const AuthContext_1 = require("../context/AuthContext");
+function LoginPage({ onBackToHome, onNavigate, }) {
+    const auth = (0, AuthContext_1.useAuth)();
     const [showPassword, setShowPassword] = (0, react_1.useState)(false);
     const [rememberMe, setRememberMe] = (0, react_1.useState)(false);
     const [show2FAModal, setShow2FAModal] = (0, react_1.useState)(false);
+    // Form state
+    const [email, setEmail] = (0, react_1.useState)("");
+    const [password, setPassword] = (0, react_1.useState)("");
+    const [loading, setLoading] = (0, react_1.useState)(false);
+    const [error, setError] = (0, react_1.useState)(null);
+    // OTP state
+    const [otpDigits, setOtpDigits] = (0, react_1.useState)(["", "", "", "", "", ""]);
+    const [otpLoading, setOtpLoading] = (0, react_1.useState)(false);
+    const [otpError, setOtpError] = (0, react_1.useState)(null);
+    const [otpSending, setOtpSending] = (0, react_1.useState)(false);
+    const otpRefs = (0, react_1.useRef)([]);
+    const openOtpModal = () => __awaiter(this, void 0, void 0, function* () {
+        setOtpSending(true);
+        setOtpError(null);
+        try {
+            yield authService_1.authService.sendOtp(email);
+            setShow2FAModal(true);
+        }
+        catch (err) {
+            setOtpError(err instanceof Error ? err.message : 'Failed to send OTP.');
+        }
+        finally {
+            setOtpSending(false);
+        }
+    });
+    const handleSubmit = (e) => __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+        try {
+            const res = yield authService_1.authService.login(email, password);
+            if (res.token && res.data) {
+                const userId = ((_b = (_a = res.data.userId) !== null && _a !== void 0 ? _a : res.data.user_id) !== null && _b !== void 0 ? _b : "");
+                const role = ((_c = res.data.role) !== null && _c !== void 0 ? _c : "");
+                auth.login(res.token, { userId, role, email });
+                if (role === "FOUNDER" || role === "STARTUPPER") {
+                    onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("control-panel");
+                }
+                else {
+                    onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("investor-dashboard");
+                }
+            }
+            else {
+                setError(res.message || "Login failed. Please check your credentials.");
+            }
+        }
+        catch (err) {
+            setError(err instanceof Error ? err.message : "Login failed. Please try again.");
+        }
+        finally {
+            setLoading(false);
+        }
+    });
+    const handleOtpChange = (index, value) => {
+        var _a;
+        if (value.length > 1)
+            value = value.slice(-1);
+        const next = [...otpDigits];
+        next[index] = value;
+        setOtpDigits(next);
+        if (value && index < 5) {
+            (_a = otpRefs.current[index + 1]) === null || _a === void 0 ? void 0 : _a.focus();
+        }
+    };
+    const handleOtpKeyDown = (index, e) => {
+        var _a;
+        if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+            (_a = otpRefs.current[index - 1]) === null || _a === void 0 ? void 0 : _a.focus();
+        }
+    };
+    const handleVerifyOtp = () => __awaiter(this, void 0, void 0, function* () {
+        const otp = otpDigits.join("");
+        if (otp.length < 6) {
+            setOtpError("Please enter all 6 digits.");
+            return;
+        }
+        setOtpError(null);
+        setOtpLoading(true);
+        try {
+            const res = yield authService_1.authService.verifyOtp(email, otp);
+            if (res.success) {
+                setShow2FAModal(false);
+                // Re-trigger login after OTP verification
+                onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("home");
+            }
+            else {
+                setOtpError(res.message || "Invalid code. Please try again.");
+            }
+        }
+        catch (err) {
+            setOtpError(err instanceof Error ? err.message : "Verification failed.");
+        }
+        finally {
+            setOtpLoading(false);
+        }
+    });
     return (<div className="min-h-screen bg-white flex flex-col">
       {/* Top Minimal Navbar */}
       <nav className="bg-white border-b border-[#DCE3E8] shadow-sm sticky top-0 z-50">
@@ -52,8 +161,13 @@ function LoginPage({ onBackToHome }) {
                 </p>
               </div>
 
+              {/* Error Banner */}
+              {error && (<div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm font-medium">{error}</p>
+                </div>)}
+
               {/* Login Form */}
-              <form className="space-y-6">
+              <form className="space-y-6" onSubmit={handleSubmit}>
                 {/* Email Field */}
                 <div>
                   <label htmlFor="email" className="block text-sm font-semibold text-[#0F1720] mb-2">
@@ -63,7 +177,7 @@ function LoginPage({ onBackToHome }) {
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <lucide_react_1.Mail className="h-5 w-5 text-[#6C7A89]"/>
                     </div>
-                    <input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" className="block w-full pl-12 pr-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                    <input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="block w-full pl-12 pr-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                   </div>
                 </div>
 
@@ -76,12 +190,12 @@ function LoginPage({ onBackToHome }) {
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <lucide_react_1.Lock className="h-5 w-5 text-[#6C7A89]"/>
                     </div>
-                    <input id="password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" className="block w-full pl-12 pr-12 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
+                    <input id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} required className="block w-full pl-12 pr-12 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060] transition-all duration-200"/>
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center">
                       {showPassword ? (<lucide_react_1.EyeOff className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>) : (<lucide_react_1.Eye className="h-5 w-5 text-[#6C7A89] hover:text-[#274060]"/>)}
                     </button>
                   </div>
-                  
+
                   {/* Forgot Password Link */}
                   <div className="flex justify-end mt-2">
                     <button type="button" className="text-sm text-[#274060] hover:text-[#3A5A7A] font-medium transition-colors duration-200">
@@ -105,8 +219,11 @@ function LoginPage({ onBackToHome }) {
                 </div>
 
                 {/* Sign In Button */}
-                <button type="submit" className="w-full py-3 px-4 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#274060] transition-all duration-200 shadow-lg hover:shadow-xl">
-                  Sign In
+                <button type="submit" disabled={loading} className="w-full py-3 px-4 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#274060] transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {loading ? (<>
+                      <lucide_react_1.Loader2 className="w-4 h-4 animate-spin"/>
+                      <span>Signing in...</span>
+                    </>) : ("Sign In")}
                 </button>
               </form>
 
@@ -116,7 +233,9 @@ function LoginPage({ onBackToHome }) {
                   <div className="w-full border-t border-[#DCE3E8]"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-[#6B7A8C] font-medium">Other sign-in methods</span>
+                  <span className="px-4 bg-white text-[#6B7A8C] font-medium">
+                    Other sign-in methods
+                  </span>
                 </div>
               </div>
 
@@ -142,20 +261,28 @@ function LoginPage({ onBackToHome }) {
                 </button>
 
                 {/* Authenticator App Option */}
-                <button type="button" onClick={() => setShow2FAModal(true)} className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left">
+                <button type="button" onClick={openOtpModal} disabled={otpSending} className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left disabled:opacity-60">
                   <lucide_react_1.Shield className="w-5 h-5 mt-0.5 flex-shrink-0"/>
                   <div className="flex-1">
-                    <div className="font-semibold">Sign in with Authenticator App</div>
-                    <div className="text-xs mt-1 opacity-80">Use your registered authenticator app for secure login.</div>
+                    <div className="font-semibold">
+                      {otpSending ? 'Sending code...' : 'Sign in with Authenticator App'}
+                    </div>
+                    <div className="text-xs mt-1 opacity-80">
+                      Use your registered authenticator app for secure login.
+                    </div>
                   </div>
                 </button>
 
                 {/* SMS Code Option */}
-                <button type="button" onClick={() => setShow2FAModal(true)} className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left">
+                <button type="button" onClick={openOtpModal} disabled={otpSending} className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left disabled:opacity-60">
                   <lucide_react_1.Smartphone className="w-5 h-5 mt-0.5 flex-shrink-0"/>
                   <div className="flex-1">
-                    <div className="font-semibold">Sign in using SMS Code</div>
-                    <div className="text-xs mt-1 opacity-80">Receive a verification code via text message.</div>
+                    <div className="font-semibold">
+                      {otpSending ? 'Sending code...' : 'Sign in using SMS Code'}
+                    </div>
+                    <div className="text-xs mt-1 opacity-80">
+                      Receive a verification code via text message.
+                    </div>
                   </div>
                 </button>
               </div>
@@ -163,8 +290,8 @@ function LoginPage({ onBackToHome }) {
               {/* Registration Link */}
               <div className="mt-8 text-center">
                 <p className="text-sm text-[#6B7A8C]">
-                  Don't have an account?{' '}
-                  <button type="button" className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
+                  Don't have an account?{" "}
+                  <button type="button" onClick={() => onNavigate === null || onNavigate === void 0 ? void 0 : onNavigate("register")} className="text-[#274060] font-semibold hover:text-[#3A5A7A] transition-colors duration-200">
                     Create Account
                   </button>
                 </p>
@@ -186,7 +313,8 @@ function LoginPage({ onBackToHome }) {
                 Invest Smarter. Grow Faster.
               </h2>
               <p className="text-xl text-white opacity-90 leading-relaxed">
-                Join a secure ecosystem where investors and startups connect. Build your portfolio with verified opportunities.
+                Join a secure ecosystem where investors and startups connect.
+                Build your portfolio with verified opportunities.
               </p>
 
               {/* Abstract Fintech Shapes */}
@@ -199,8 +327,12 @@ function LoginPage({ onBackToHome }) {
                       </svg>
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">Secure Platform</div>
-                      <div className="text-white text-sm opacity-80">Bank-level encryption</div>
+                      <div className="text-white font-semibold text-lg">
+                        Secure Platform
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Bank-level encryption
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">
@@ -216,8 +348,12 @@ function LoginPage({ onBackToHome }) {
                       </svg>
                     </div>
                     <div className="text-left">
-                      <div className="text-white font-semibold text-lg">High Returns</div>
-                      <div className="text-white text-sm opacity-80">Verified opportunities</div>
+                      <div className="text-white font-semibold text-lg">
+                        High Returns
+                      </div>
+                      <div className="text-white text-sm opacity-80">
+                        Verified opportunities
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 bg-white bg-opacity-20 rounded-full overflow-hidden">
@@ -251,14 +387,24 @@ function LoginPage({ onBackToHome }) {
               </p>
             </div>
 
+            {/* OTP Error */}
+            {otpError && (<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-700 text-sm">{otpError}</p>
+              </div>)}
+
             {/* OTP Inputs */}
             <div className="flex justify-center gap-3 mb-6">
-              {[1, 2, 3, 4, 5, 6].map((index) => (<input key={index} type="text" maxLength={1} className="w-12 h-14 text-center text-xl font-semibold border-2 border-[#DCE3E8] rounded-lg focus:border-[#274060] focus:ring-2 focus:ring-[#274060] transition-all duration-200" placeholder="•"/>))}
+              {otpDigits.map((digit, index) => (<input key={index} ref={(el) => {
+                    otpRefs.current[index] = el;
+                }} type="text" maxLength={1} value={digit} onChange={(e) => handleOtpChange(index, e.target.value)} onKeyDown={(e) => handleOtpKeyDown(index, e)} className="w-12 h-14 text-center text-xl font-semibold border-2 border-[#DCE3E8] rounded-lg focus:border-[#274060] focus:ring-2 focus:ring-[#274060] transition-all duration-200" placeholder="•"/>))}
             </div>
 
             {/* Verify Button */}
-            <button type="button" className="w-full py-3 px-4 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] transition-colors duration-200 shadow-lg">
-              Verify Code
+            <button type="button" onClick={handleVerifyOtp} disabled={otpLoading} className="w-full py-3 px-4 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] transition-colors duration-200 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              {otpLoading ? (<>
+                  <lucide_react_1.Loader2 className="w-4 h-4 animate-spin"/>
+                  Verifying...
+                </>) : ("Verify Code")}
             </button>
 
             {/* Resend Link */}
