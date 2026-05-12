@@ -38,7 +38,21 @@ export default function LoginPage({
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSending, setOtpSending] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const openOtpModal = async () => {
+    setOtpSending(true);
+    setOtpError(null);
+    try {
+      await authService.sendOtp(email);
+      setShow2FAModal(true);
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Failed to send OTP.');
+    } finally {
+      setOtpSending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +64,7 @@ export default function LoginPage({
         const userId = (res.data.userId ?? res.data.user_id ?? "") as string;
         const role = (res.data.role ?? "") as string;
         auth.login(res.token, { userId, role, email });
-        if (role === "FOUNDER") {
+        if (role === "FOUNDER" || role === "STARTUPPER") {
           onNavigate?.("control-panel");
         } else {
           onNavigate?.("investor-dashboard");
@@ -329,13 +343,14 @@ export default function LoginPage({
                 {/* Authenticator App Option */}
                 <button
                   type="button"
-                  onClick={() => setShow2FAModal(true)}
-                  className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left"
+                  onClick={openOtpModal}
+                  disabled={otpSending}
+                  className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left disabled:opacity-60"
                 >
                   <Shield className="w-5 h-5 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
                     <div className="font-semibold">
-                      Sign in with Authenticator App
+                      {otpSending ? 'Sending code...' : 'Sign in with Authenticator App'}
                     </div>
                     <div className="text-xs mt-1 opacity-80">
                       Use your registered authenticator app for secure login.
@@ -346,12 +361,15 @@ export default function LoginPage({
                 {/* SMS Code Option */}
                 <button
                   type="button"
-                  onClick={() => setShow2FAModal(true)}
-                  className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left"
+                  onClick={openOtpModal}
+                  disabled={otpSending}
+                  className="w-full py-3 px-4 border-2 border-[#274060] text-[#274060] font-medium rounded-lg hover:bg-[#274060] hover:text-white transition-all duration-200 flex items-start gap-3 text-left disabled:opacity-60"
                 >
                   <Smartphone className="w-5 h-5 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
-                    <div className="font-semibold">Sign in using SMS Code</div>
+                    <div className="font-semibold">
+                      {otpSending ? 'Sending code...' : 'Sign in using SMS Code'}
+                    </div>
                     <div className="text-xs mt-1 opacity-80">
                       Receive a verification code via text message.
                     </div>

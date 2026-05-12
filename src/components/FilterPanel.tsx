@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, ChevronDown, Grid3x3, List, X } from 'lucide-react';
 
 interface FilterPanelProps {
@@ -26,6 +26,17 @@ export default function FilterPanel({ onFilterChange, viewMode, onViewModeChange
     { value: 'highest-growth', label: 'Highest Growth' }
   ];
 
+  useEffect(() => {
+    const f: Record<string, string> = {};
+    if (searchQuery) f.search = searchQuery;
+    if (industry) f.industry = industry;
+    if (fundingStage) f.stage = fundingStage;
+    if (location) f.location = location;
+    if (minInvestment) f.min_investment = minInvestment;
+    if (sortBy) f.sort_by = sortBy;
+    onFilterChange(f);
+  }, [searchQuery, industry, fundingStage, location, minInvestment, sortBy]);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setIndustry('');
@@ -33,7 +44,6 @@ export default function FilterPanel({ onFilterChange, viewMode, onViewModeChange
     setLocation('');
     setMinInvestment('');
     setSortBy('newest');
-    onFilterChange({});
   };
 
   return (

@@ -1,13 +1,125 @@
-import { MapPin, Bookmark, TrendingUp, Users, Calendar, FileText, Download, ChevronRight, ArrowLeft, Play } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, Bookmark, TrendingUp, Calendar, FileText, Download, ChevronRight, ArrowLeft, Play, Loader2, AlertCircle, X, ExternalLink } from 'lucide-react';
+import { startupService, StartupSummary, CampaignSummary, StartupDocument } from '../services/startupService';
+import { investService } from '../services/investService';
+import { analysisService, AnalysisResponse } from '../services/analysisService';
 import svgPaths from "../imports/svg-y9jn7u1z55";
-import imgImageStartupPitchVideo from "iwf:asset/3bc67c5fea0e71fdd060e346f5201d8a2983a709.png";
-import imgImageProductDemoVideo from "iwf:asset/b20dac887cc802b7143fe802759e332e0bd5dfa9.png";
 
 interface StartupDetailProps {
+  startupId?: number | null;
   onBack?: () => void;
 }
 
-export default function StartupDetail({ onBack }: StartupDetailProps) {
+export default function StartupDetail({ startupId, onBack }: StartupDetailProps) {
+  const [startup, setStartup] = useState<StartupSummary | null>(null);
+  const [campaign, setCampaign] = useState<CampaignSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResponse['analysis'] | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [showInvestModal, setShowInvestModal] = useState(false);
+  const [investAmount, setInvestAmount] = useState(0);
+  const [investLoading, setInvestLoading] = useState(false);
+  const [investMsg, setInvestMsg] = useState<string | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<StartupDocument[]>([]);
+
+  useEffect(() => {
+    if (!startupId) return;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      startupService.getStartup(startupId).catch(() => null),
+      startupService.getCampaignsByStartup(startupId).catch(() => null),
+    ]).then(([startupRes, campaignsRes]) => {
+      if (startupRes) {
+        setStartup(startupRes as unknown as StartupSummary);
+      } else {
+        setError('Failed to load startup details');
+      }
+      if (campaignsRes && campaignsRes.campaigns?.length > 0) {
+        setCampaign(campaignsRes.campaigns[0]);
+      }
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : 'Failed to load startup');
+    }).finally(() => {
+      setLoading(false);
+    });
+  }, [startupId]);
+
+  useEffect(() => {
+    if (!startupId) return;
+    startupService.getVideo(startupId).then(r => { if (r.youtube_url) setYoutubeUrl(r.youtube_url); }).catch(() => {});
+    startupService.getDocuments(startupId).then(r => setDocuments(r.documents ?? [])).catch(() => {});
+  }, [startupId]);
+
+  useEffect(() => {
+    if (!startupId) return;
+    setAnalysisLoading(true);
+    analysisService.analyzeStartup(startupId)
+      .then(res => setAnalysis(res.analysis))
+      .catch(() => {})
+      .finally(() => setAnalysisLoading(false));
+  }, [startupId]);
+
+  const handleInvest = async () => {
+    if (!startupId || !campaign || investAmount < (campaign.minInvestment || 1)) return;
+    setInvestLoading(true);
+    setInvestMsg(null);
+    try {
+      const res = await investService.invest({
+        startup_id: startupId,
+        campaign_id: campaign.id,
+        amount: investAmount,
+      });
+      if (res.success) {
+        setInvestMsg(`Investment of $${investAmount.toLocaleString()} recorded! The founder will be in touch.`);
+      } else {
+        setInvestMsg(res.message || 'Investment failed.');
+      }
+    } catch (err) {
+      setInvestMsg(err instanceof Error ? err.message : 'Investment failed.');
+    } finally {
+      setInvestLoading(false);
+    }
+  };
+
+  const getYoutubeEmbedId = (url: string): string | null => {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
+      return u.searchParams.get('v');
+    } catch { return null; }
+  };
+
+  const startName = startup?.name || 'Startup';
+  const startLogo = startName.substring(0, 2).toUpperCase();
+  const startLocation = startup?.location || 'Unknown';
+  const targetAmount = campaign?.targetAmount || 500000;
+  const raisedAmount = campaign?.raisedAmount || 0;
+  const fundingPct = targetAmount > 0 ? ((raisedAmount / targetAmount) * 100).toFixed(0) : '0';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#274060]" />
+        <span className="ml-3 text-[#6B7A8C]">Loading startup details...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex flex-col items-center justify-center gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-red-700 font-medium">{error}</p>
+        <button onClick={onBack} className="px-4 py-2 bg-[#274060] text-white rounded-lg hover:bg-[#3A5A7A]">
+          Back to Startups
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
       {/* Back Button */}
@@ -33,117 +145,73 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
               {/* Left Side - Startup Info */}
               <div className="lg:col-span-2 space-y-6">
                 <div className="flex items-start gap-6">
-                  {/* Logo */}
                   <div className="flex-shrink-0 w-24 h-24 bg-gradient-to-br from-[#3A5A7A] to-[#274060] rounded-xl flex items-center justify-center text-white">
-                    <span className="text-3xl font-bold">FF</span>
+                    <span className="text-3xl font-bold">{startLogo}</span>
                   </div>
-                  
-                  {/* Name and Info */}
                   <div className="flex-1 space-y-3">
-                    <h1 className="text-4xl font-bold text-[#0F1720]">FinFlow</h1>
-                    
-                    {/* Badges */}
+                    <h1 className="text-4xl font-bold text-[#0F1720]">{startName}</h1>
                     <div className="flex flex-wrap gap-2">
-                      <span className="px-4 py-1.5 bg-[#6C7A89] text-white rounded-full text-sm font-medium">
-                        Fintech
-                      </span>
-                      <span className="px-4 py-1.5 bg-[#172A45] text-white rounded-full text-sm font-medium">
-                        Series A
-                      </span>
+                      {campaign && (
+                        <span className="px-4 py-1.5 bg-[#6C7A89] text-white rounded-full text-sm font-medium capitalize">{campaign.status}</span>
+                      )}
                     </div>
-                    
-                    {/* Location */}
                     <div className="flex items-center gap-2 text-[#6B7A8C]">
                       <MapPin className="w-4 h-4" />
-                      <span>San Francisco, CA</span>
+                      <span>{startLocation}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Key Statistics */}
+                {campaign && (
                 <div className="pt-4 border-t border-[#DCE3E8]">
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    {/* Revenue */}
                     <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
                       <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Revenue</div>
-                      <div className="text-xl font-bold text-[#274060]">$42,500</div>
-                      <div className="text-xs text-[#6B7A8C]">/ month</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#2F6F5E]/10 text-[#2F6F5E]">
-                        +12% MoM
-                      </span>
+                      <div className="text-xl font-bold text-[#274060]">${(campaign.revenue || 0).toLocaleString()}</div>
+                      <div className="text-xs text-[#6B7A8C]">monthly</div>
                     </div>
-
-                    {/* Burn Rate */}
                     <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
                       <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Burn Rate</div>
-                      <div className="text-xl font-bold text-[#274060]">$8,000</div>
+                      <div className="text-xl font-bold text-[#274060]">${(campaign.burnRate || 0).toLocaleString()}</div>
                       <div className="text-xs text-[#6B7A8C]">/ month</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#6C7A89]/10 text-[#6C7A89]">
-                        Stable
-                      </span>
                     </div>
-
-                    {/* Runway */}
                     <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
                       <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Runway</div>
-                      <div className="text-xl font-bold text-[#274060]">14</div>
+                      <div className="text-xl font-bold text-[#274060]">{campaign.runway || 0}</div>
                       <div className="text-xs text-[#6B7A8C]">months</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#2F6F5E]/10 text-[#2F6F5E]">
-                        Healthy
-                      </span>
                     </div>
-
-                    {/* Investor Interest */}
-                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
-                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Investor Interest</div>
-                      <div className="text-xl font-bold text-[#274060]">147</div>
-                      <div className="text-xs text-[#6B7A8C]">investors</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#3F5E8C]/10 text-[#3F5E8C]">
-                        Trending
-                      </span>
-                    </div>
-
-                    {/* Active Customers */}
-                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
-                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Active Customers</div>
-                      <div className="text-xl font-bold text-[#274060]">2,840</div>
-                      <div className="text-xs text-[#6B7A8C]">paying users</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#2F6F5E]/10 text-[#2F6F5E]">
-                        +24% growth
-                      </span>
-                    </div>
-
-                    {/* Valuation */}
                     <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
                       <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Valuation</div>
-                      <div className="text-xl font-bold text-[#274060]">$8.5M</div>
-                      <div className="text-xs text-[#6B7A8C]">pre-money</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#3F5E8C]/10 text-[#3F5E8C]">
-                        Series A
-                      </span>
+                      <div className="text-xl font-bold text-[#274060]">${(campaign.valuation || 0).toLocaleString()}</div>
                     </div>
-
-                    {/* Team Size */}
-                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
-                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Team Size</div>
-                      <div className="text-xl font-bold text-[#274060]">24</div>
-                      <div className="text-xs text-[#6B7A8C]">employees</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#6C7A89]/10 text-[#6C7A89]">
-                        Scaling
-                      </span>
-                    </div>
-
-                    {/* Gross Margin */}
                     <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
                       <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Gross Margin</div>
-                      <div className="text-xl font-bold text-[#274060]">68%</div>
-                      <div className="text-xs text-[#6B7A8C]">profitability</div>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#2F6F5E]/10 text-[#2F6F5E]">
-                        Strong
-                      </span>
+                      <div className="text-xl font-bold text-[#274060]">{(campaign.grossMargin || 0).toFixed(0)}%</div>
+                    </div>
+                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
+                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Min Investment</div>
+                      <div className="text-xl font-bold text-[#274060]">${(campaign.minInvestment || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
+                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Revenue Share</div>
+                      <div className="text-xl font-bold text-[#274060]">{(campaign.revenueShare || 0).toFixed(0)}%</div>
+                    </div>
+                    <div className="space-y-1.5 p-3 border border-[#DCE3E8] rounded-lg bg-[#F5F7FA]/30">
+                      <div className="text-xs font-medium text-[#6B7A8C] uppercase tracking-wide">Active Customers</div>
+                      <div className="text-xl font-bold text-[#274060]">{campaign.activeCustomers || 0}</div>
                     </div>
                   </div>
                 </div>
+                )}
+
+                {!campaign && startup?.description && (
+                  <div className="pt-4 border-t border-[#DCE3E8]">
+                    <p className="text-[#6B7A8C] leading-relaxed">{startup.description}</p>
+                    {startup.websiteUrl && (
+                      <a href={startup.websiteUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-3 text-sm text-[#274060] hover:underline">Visit Website →</a>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Right Side - Investment Panel */}
@@ -152,7 +220,7 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="text-sm text-[#6B7A8C]">Funding Goal</div>
-                      <div className="text-2xl font-bold text-[#0F1720]">$500,000</div>
+                      <div className="text-2xl font-bold text-[#0F1720]">${targetAmount.toLocaleString()}</div>
                     </div>
                     <button className="p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors duration-200">
                       <Bookmark className="w-5 h-5 text-[#274060]" />
@@ -161,48 +229,42 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
                   
                   <div>
                     <div className="text-sm text-[#6B7A8C] mb-1">Amount Raised</div>
-                    <div className="text-3xl font-bold text-[#274060]">$320,000</div>
+                    <div className="text-3xl font-bold text-[#274060]">${raisedAmount.toLocaleString()}</div>
                   </div>
 
-                  {/* Progress Bar */}
+                  {targetAmount > 0 && (
                   <div className="space-y-2">
                     <div className="w-full bg-[#DCE3E8] rounded-full h-3 overflow-hidden">
-                      <div 
-                        className="h-full bg-[#274060] rounded-full transition-all duration-500"
-                        style={{ width: '64%' }}
-                      ></div>
+                      <div className="h-full bg-[#274060] rounded-full transition-all duration-500" style={{ width: `${Math.min(Number(fundingPct), 100)}%` }}></div>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#274060] font-semibold">64% funded</span>
-                      <span className="text-[#6B7A8C]">23 days left</span>
+                      <span className="text-[#274060] font-semibold">{fundingPct}% funded</span>
+                      {campaign?.deadline && (
+                        <span className="text-[#6B7A8C]">{Math.max(0, Math.ceil((new Date(campaign.deadline).getTime() - Date.now()) / (1000*60*60*24)))} days left</span>
+                      )}
                     </div>
                   </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-[#DCE3E8] space-y-4">
+                  {campaign && (
                   <div className="flex justify-between">
                     <span className="text-[#6B7A8C]">Minimum Investment</span>
-                    <span className="font-semibold text-[#0F1720]">$1,000</span>
+                    <span className="font-semibold text-[#0F1720]">${(campaign.minInvestment || 0).toLocaleString()}</span>
                   </div>
-                  
-                  <button className="w-full py-3 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-colors duration-200">
-                    Invest Now
-                  </button>
-                  
-                  <p className="text-xs text-[#6B7A8C] text-center">
-                    Investment involves risk. Please read our risk disclosure.
-                  </p>
+                  )}
+                  <button onClick={() => { setInvestMsg(null); setInvestAmount(campaign?.minInvestment || 0); setShowInvestModal(true); }}
+                    className="w-full py-3 bg-[#274060] text-white rounded-lg font-semibold hover:bg-[#3A5A7A] transition-colors duration-200">Invest Now</button>
+                  <p className="text-xs text-[#6B7A8C] text-center">Investment involves risk. Please read our risk disclosure.</p>
                 </div>
               </div>
             </div>
 
-            {/* AI Investment Insight Panel - Full Width */}
+            {/* AI Investment Insight Panel - Full Width (Ollama-powered) */}
             <div className="mt-6 relative overflow-hidden rounded-xl bg-gradient-to-br from-[#0A192F] via-[#172A45] to-[#274060]">
-              {/* Subtle highlight overlay */}
               <div className="absolute inset-0 bg-gradient-to-br from-[rgba(108,122,137,0.15)] via-transparent to-transparent pointer-events-none"></div>
-              
               <div className="relative p-8">
-                {/* Header */}
                 <div className="mb-6 pb-6 border-b border-white/10">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
@@ -213,162 +275,116 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
                     <h2 className="text-2xl font-bold text-white">AI Investment Insight</h2>
                   </div>
                   <p className="text-sm text-[#DCE3E8] leading-relaxed">
-                    Machine-assisted risk and growth evaluation based on financial, traction, and market signals.
+                    Machine-assisted risk and growth evaluation based on financial, traction, and market signals via local Ollama Qwen2.5.
                   </p>
                 </div>
 
-                {/* AI Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                  {/* AI Confidence Score */}
-                  <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
-                    <div className="text-sm font-medium text-[#DCE3E8] mb-3">AI Confidence Score</div>
-                    <div className="flex items-end gap-2 mb-3">
-                      <span className="text-5xl font-bold text-white">82</span>
-                      <span className="text-2xl text-[#DCE3E8] pb-2">/ 100</span>
-                    </div>
-                    <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-[#2F6F5E]/30 text-white border border-[#2F6F5E]/40">
-                      Moderate-High Potential
-                    </span>
+                {analysisLoading ? (
+                  <div className="flex items-center justify-center py-12 text-[#DCE3E8]">
+                    <Loader2 className="w-6 h-6 animate-spin mr-3" />
+                    Running analysis via local AI...
                   </div>
-
-                  {/* Risk Level */}
-                  <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
-                    <div className="text-sm font-medium text-[#DCE3E8] mb-3">Risk Level</div>
-                    <div className="text-3xl font-bold text-white mb-3">Medium</div>
-                    <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-[#B38B2D]/30 text-white border border-[#B38B2D]/40">
-                      Balanced Risk Profile
-                    </span>
-                  </div>
-
-                  {/* Predicted Growth */}
-                  <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
-                    <div className="text-sm font-medium text-[#DCE3E8] mb-3">Predicted 12-Month Growth</div>
-                    <div className="text-3xl font-bold text-white mb-3">+18–25%</div>
-                    <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-[#3F5E8C]/30 text-white border border-[#3F5E8C]/40">
-                      Growth Trajectory
-                    </span>
-                  </div>
-                </div>
-
-                {/* Analysis Preview & Expandable Section */}
-                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-                  <div className="text-[#DCE3E8] leading-relaxed mb-4">
-                    <p className="line-clamp-2">
-                      Our model indicates steady growth driven by recurring revenue and strong customer retention. Market conditions remain favorable with increasing demand in the fintech sector.
-                    </p>
-                  </div>
-
-                  {/* Expand Button */}
-                  <button 
-                    onClick={() => {
-                      const expandable = document.getElementById('ai-analysis-expandable');
-                      const button = document.getElementById('ai-analysis-button');
-                      const icon = document.getElementById('ai-analysis-icon');
-                      if (expandable && button && icon) {
-                        const isExpanded = expandable.style.display !== 'none';
-                        expandable.style.display = isExpanded ? 'none' : 'block';
-                        button.textContent = isExpanded ? 'View Full AI Analysis' : 'Hide AI Analysis';
-                        icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
-                      }
-                    }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white text-sm font-medium transition-all duration-200"
-                  >
-                    <span id="ai-analysis-button">View Full AI Analysis</span>
-                    <ChevronRight id="ai-analysis-icon" className="w-4 h-4 transition-transform duration-200" />
-                  </button>
-
-                  {/* Expandable Content */}
-                  <div id="ai-analysis-expandable" style={{ display: 'none' }} className="space-y-6 pt-6 mt-6 border-t border-white/10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Revenue Stability */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-[#2F6F5E]/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-[#2F6F5E]" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <h4 className="text-white font-semibold">Revenue Stability</h4>
+                ) : analysis ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
+                        <div className="text-sm font-medium text-[#DCE3E8] mb-3">Chance of Winning</div>
+                        <div className="flex items-end gap-2 mb-3">
+                          <span className="text-5xl font-bold text-white">{analysis.chance_of_winning}</span>
+                          <span className="text-2xl text-[#DCE3E8] pb-2">/ 100</span>
                         </div>
-                        <p className="text-[#DCE3E8] text-sm leading-relaxed pl-10">
-                          Revenue has grown consistently over the past 6 months with low volatility. Monthly recurring revenue shows strong predictability with minimal churn.
-                        </p>
+                        <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
+                          analysis.recommendation === 'Strong Buy' ? 'bg-[#2F6F5E]/30 text-white border border-[#2F6F5E]/40' :
+                          analysis.recommendation === 'Moderate Buy' ? 'bg-[#3F5E8C]/30 text-white border border-[#3F5E8C]/40' :
+                          analysis.recommendation === 'Hold' ? 'bg-[#B38B2D]/30 text-white border border-[#B38B2D]/40' :
+                          'bg-[#A94442]/30 text-white border border-[#A94442]/40'
+                        }`}>
+                          {analysis.recommendation}
+                        </span>
                       </div>
-
-                      {/* Market Position */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-[#3F5E8C]/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-[#3F5E8C]" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-                            </svg>
-                          </div>
-                          <h4 className="text-white font-semibold">Market Position</h4>
-                        </div>
-                        <p className="text-[#DCE3E8] text-sm leading-relaxed pl-10">
-                          Operates in a competitive but expanding fintech niche with increasing demand. The addressable market is projected to grow 22% annually through 2028.
-                        </p>
+                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
+                        <div className="text-sm font-medium text-[#DCE3E8] mb-3">Risk Level</div>
+                        <div className="text-3xl font-bold text-white mb-3">{analysis.risk_level}</div>
+                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-white/10 text-white border border-white/20">
+                          AI Confidence: {analysis.confidence_score}%
+                        </span>
                       </div>
-
-                      {/* Risk Factors */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-[#B38B2D]/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-[#B38B2D]" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <h4 className="text-white font-semibold">Risk Factors</h4>
-                        </div>
-                        <ul className="space-y-2 text-[#DCE3E8] text-sm pl-10">
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#B38B2D] mt-0.5">•</span>
-                            <span>Customer acquisition cost rising slightly, requiring monitoring.</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#B38B2D] mt-0.5">•</span>
-                            <span>High dependency on top 3 enterprise clients (62% of revenue).</span>
-                          </li>
-                        </ul>
-                      </div>
-
-                      {/* Opportunity Signals */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-[#2F6F5E]/20 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-[#2F6F5E]" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <h4 className="text-white font-semibold">Opportunity Signals</h4>
-                        </div>
-                        <ul className="space-y-2 text-[#DCE3E8] text-sm pl-10">
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#2F6F5E] mt-0.5">•</span>
-                            <span>Strong month-over-month growth trajectory with positive momentum.</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#2F6F5E] mt-0.5">•</span>
-                            <span>Healthy runway provides stability for execution and scaling.</span>
-                          </li>
-                          <li className="flex items-start gap-2">
-                            <span className="text-[#2F6F5E] mt-0.5">•</span>
-                            <span>Positive investor engagement indicates strong market validation.</span>
-                          </li>
-                        </ul>
+                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-5 border border-white/10">
+                        <div className="text-sm font-medium text-[#DCE3E8] mb-3">Predicted 12-Month Growth</div>
+                        <div className="text-xl font-bold text-white mb-3 leading-relaxed">{analysis.growth_prediction}</div>
                       </div>
                     </div>
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                      <p className="text-[#DCE3E8] leading-relaxed mb-4">{analysis.summary}</p>
+                      {analysis.strengths.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="text-white font-semibold mb-2">Strengths</h4>
+                          <ul className="space-y-1">
+                            {analysis.strengths.map((s, i) => (
+                              <li key={i} className="text-[#DCE3E8] text-sm flex items-start gap-2">
+                                <span className="text-[#2F6F5E] mt-0.5">•</span>{s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.risks.length > 0 && (
+                        <div>
+                          <h4 className="text-white font-semibold mb-2">Risks</h4>
+                          <ul className="space-y-1">
+                            {analysis.risks.map((r, i) => (
+                              <li key={i} className="text-[#DCE3E8] text-sm flex items-start gap-2">
+                                <span className="text-[#B38B2D] mt-0.5">•</span>{r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-6 p-4 bg-white/5 backdrop-blur-sm rounded-lg border border-white/10">
+                      <p className="text-xs text-[#DCE3E8] leading-relaxed">
+                        <span className="font-semibold text-white">Disclaimer:</span> AI insights are generated by a local Ollama model (Qwen2.5:3b) based on available data and do not guarantee investment outcomes.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[#DCE3E8] text-sm py-4 text-center">
+                    AI analysis unavailable. Ensure Ollama is running locally.
                   </div>
-                </div>
-
-                {/* Disclaimer */}
-                <div className="mt-6 p-4 bg-white/5 backdrop-blur-sm rounded-lg border border-white/10">
-                  <p className="text-xs text-[#DCE3E8] leading-relaxed">
-                    <span className="font-semibold text-white">Disclaimer:</span> AI insights are predictive estimates based on available data and do not guarantee investment outcomes. Please conduct your own due diligence and consult with financial advisors before making investment decisions.
-                  </p>
-                </div>
+                )}
               </div>
             </div>
+
+            {/* Invest Modal */}
+            {showInvestModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative">
+                  <button onClick={() => setShowInvestModal(false)}
+                    className="absolute top-4 right-4 text-[#0F1720] opacity-60 hover:opacity-100 transition-opacity">
+                    <X className="w-6 h-6" />
+                  </button>
+                  <h3 className="text-2xl font-bold text-[#0F1720] mb-2">Invest in {startName}</h3>
+                  <p className="text-sm text-[#6B7A8C] mb-6">
+                    {campaign && <>Min investment: ${campaign.minInvestment?.toLocaleString()}</>}
+                  </p>
+                  {investMsg && (
+                    <div className={`mb-4 p-3 rounded-lg text-sm ${investMsg.includes('recorded') ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                      {investMsg}
+                    </div>
+                  )}
+                  <div className="mb-6">
+                    <label className="block text-sm font-semibold text-[#0F1720] mb-2">Investment Amount ($)</label>
+                    <input type="number" min={campaign?.minInvestment || 1} value={investAmount || ''}
+                      onChange={e => setInvestAmount(parseFloat(e.target.value) || 0)}
+                      className="w-full px-4 py-3 border border-[#DCE3E8] rounded-lg focus:ring-2 focus:ring-[#274060] focus:border-[#274060]" />
+                  </div>
+                  <button onClick={handleInvest} disabled={investLoading || investAmount < (campaign?.minInvestment || 1)}
+                    className="w-full py-3 bg-[#274060] text-white font-semibold rounded-lg hover:bg-[#3A5A7A] transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    {investLoading ? 'Processing...' : `Invest $${investAmount.toLocaleString()}`}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
@@ -385,163 +401,111 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
               
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-semibold text-[#0F1720] mb-2">Mission</h3>
+                  <h3 className="font-semibold text-[#0F1720] mb-2">About</h3>
                   <p className="text-[#6B7A8C] leading-relaxed">
-                    FinFlow is revolutionizing digital banking for millennials and Gen Z by providing AI-powered 
-                    financial planning tools that make money management intuitive, automated, and accessible to everyone.
+                    {startup?.description || 'No description available.'}
                   </p>
                 </div>
                 
-                <div>
-                  <h3 className="font-semibold text-[#0F1720] mb-2">The Problem</h3>
-                  <p className="text-[#6B7A8C] leading-relaxed">
-                    Traditional banking apps are complex, unintuitive, and fail to provide personalized financial guidance. 
-                    Young professionals struggle with budgeting, saving, and investment decisions due to lack of 
-                    accessible financial education and tools.
-                  </p>
-                </div>
+                {startup?.websiteUrl && (
+                  <div>
+                    <h3 className="font-semibold text-[#0F1720] mb-2">Website</h3>
+                    <a href={startup.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-[#274060] hover:underline">
+                      {startup.websiteUrl}
+                    </a>
+                  </div>
+                )}
                 
-                <div>
-                  <h3 className="font-semibold text-[#0F1720] mb-2">Our Solution</h3>
-                  <p className="text-[#6B7A8C] leading-relaxed">
-                    FinFlow combines a sleek digital banking interface with AI-driven insights that automatically 
-                    categorize expenses, suggest savings opportunities, and provide personalized investment recommendations 
-                    based on individual financial goals and risk tolerance.
-                  </p>
-                </div>
+                {startup?.foundedAt && (
+                  <div>
+                    <h3 className="font-semibold text-[#0F1720] mb-2">Founded</h3>
+                    <p className="text-[#6B7A8C]">{new Date(startup.foundedAt).getFullYear()}</p>
+                  </div>
+                )}
                 
-                <div>
-                  <h3 className="font-semibold text-[#0F1720] mb-2">Market Opportunity</h3>
-                  <p className="text-[#6B7A8C] leading-relaxed">
-                    The digital banking market is projected to reach $8.5 trillion by 2028, with millennials and Gen Z 
-                    representing 65% of new account openings. Our target demographic is actively seeking alternatives 
-                    to traditional banking that align with their digital-first lifestyle.
-                  </p>
-                </div>
+                {startup?.location && (
+                  <div>
+                    <h3 className="font-semibold text-[#0F1720] mb-2">Location</h3>
+                    <p className="text-[#6B7A8C]">{startup.location}</p>
+                  </div>
+                )}
               </div>
 
               {/* Pitch & Demo Video Section */}
               <div className="pt-8 border-t border-[#DCE3E8]">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-6 h-6 text-[#274060]">
-                    <svg className="w-full h-full" fill="none" viewBox="0 0 24 24">
-                      <path d={svgPaths.p1c4d0dc0} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      <path d={svgPaths.p4207a00} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    </svg>
-                  </div>
+                  <Play className="w-5 h-5 text-[#274060]" fill="currentColor" />
                   <h3 className="text-xl font-semibold text-[#0F1720]">Pitch & Demo Video</h3>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Company Pitch Video */}
-                  <div className="group cursor-pointer">
-                    <div className="relative overflow-hidden rounded-xl border-2 border-[#DCE3E8] hover:border-[#274060] transition-all duration-300">
-                      <img 
-                        src={imgImageStartupPitchVideo} 
-                        alt="Company Pitch Video"
-                        className="w-full h-48 object-cover"
-                      />
-                      {/* Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0A192F]/80 via-[#0A192F]/40 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
-                      
-                      {/* Play Button */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-16 h-16 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 group-hover:bg-[#274060] transition-all duration-300 shadow-xl">
-                          <Play className="w-7 h-7 text-[#274060] group-hover:text-white ml-1 transition-colors duration-300" fill="currentColor" />
-                        </div>
-                      </div>
-                      
-                      {/* Duration Badge */}
-                      <div className="absolute top-3 right-3 bg-[#0A192F]/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-medium">
-                        3:42
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <h4 className="font-semibold text-[#0F1720] group-hover:text-[#274060] transition-colors duration-200">Company Pitch (2026)</h4>
-                      <p className="text-sm text-[#6B7A8C]">Watch our latest pitch presentation</p>
-                    </div>
+                {youtubeUrl && getYoutubeEmbedId(youtubeUrl) ? (
+                  <div className="rounded-xl overflow-hidden border-2 border-[#DCE3E8] aspect-video">
+                    <iframe
+                      className="w-full h-full"
+                      src={`https://www.youtube.com/embed/${getYoutubeEmbedId(youtubeUrl)}`}
+                      title="Pitch & Demo Video"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
                   </div>
-
-                  {/* Product Demo Video */}
-                  <div className="group cursor-pointer">
-                    <div className="relative overflow-hidden rounded-xl border-2 border-[#DCE3E8] hover:border-[#274060] transition-all duration-300">
-                      <img 
-                        src={imgImageProductDemoVideo} 
-                        alt="Product Demo"
-                        className="w-full h-48 object-cover"
-                      />
-                      {/* Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0A192F]/80 via-[#0A192F]/40 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
-                      
-                      {/* Play Button */}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-16 h-16 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 group-hover:bg-[#274060] transition-all duration-300 shadow-xl">
-                          <Play className="w-7 h-7 text-[#274060] group-hover:text-white ml-1 transition-colors duration-300" fill="currentColor" />
-                        </div>
-                      </div>
-                      
-                      {/* Duration Badge */}
-                      <div className="absolute top-3 right-3 bg-[#0A192F]/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-medium">
-                        5:18
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <h4 className="font-semibold text-[#0F1720] group-hover:text-[#274060] transition-colors duration-200">Product Demo</h4>
-                      <p className="text-sm text-[#6B7A8C]">See FinFlow in action</p>
-                    </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 py-12 rounded-xl border-2 border-dashed border-[#DCE3E8] text-center">
+                    <Play className="w-10 h-10 text-[#DCE3E8]" />
+                    <p className="text-[#6B7A8C] text-sm">No pitch video added yet.</p>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
             {/* Key Metrics Section */}
+            {campaign && (
             <div className="bg-white rounded-xl shadow-sm border border-[#DCE3E8] p-8 space-y-6">
               <h2 className="text-2xl font-bold text-[#0F1720]">Key Metrics</h2>
-              
+
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">$2.5M</div>
-                    <div className="text-sm text-[#6B7A8C] mt-2">Annual Revenue</div>
+                    <div className="text-3xl font-bold text-[#274060]">${(campaign.revenue || 0).toLocaleString()}</div>
+                    <div className="text-sm text-[#6B7A8C] mt-2">Monthly Revenue</div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">15%</div>
-                    <div className="text-sm text-[#6B7A8C] mt-2">Monthly Growth</div>
+                    <div className="text-3xl font-bold text-[#274060]">{(campaign.grossMargin || 0).toFixed(0)}%</div>
+                    <div className="text-sm text-[#6B7A8C] mt-2">Gross Margin</div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">45K</div>
-                    <div className="text-sm text-[#6B7A8C] mt-2">Active Users</div>
+                    <div className="text-3xl font-bold text-[#274060]">{campaign.activeCustomers || 0}</div>
+                    <div className="text-sm text-[#6B7A8C] mt-2">Active Customers</div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">$8.5B</div>
-                    <div className="text-sm text-[#6B7A8C] mt-2">Market Size</div>
+                    <div className="text-3xl font-bold text-[#274060]">${(campaign.targetAmount || 0).toLocaleString()}</div>
+                    <div className="text-sm text-[#6B7A8C] mt-2">Funding Goal</div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">$12M</div>
+                    <div className="text-3xl font-bold text-[#274060]">${(campaign.valuation || 0).toLocaleString()}</div>
                     <div className="text-sm text-[#6B7A8C] mt-2">Valuation</div>
                   </div>
                 </div>
-                
+
                 <div className="bg-white border border-[#DCE3E8] rounded-lg p-6 hover:border-[#274060] transition-colors duration-200">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#274060]">18 mo</div>
+                    <div className="text-3xl font-bold text-[#274060]">{campaign.runway || 0} mo</div>
                     <div className="text-sm text-[#6B7A8C] mt-2">Runway</div>
                   </div>
                 </div>
               </div>
             </div>
+            )}
 
             {/* Team Section */}
             <div className="bg-white rounded-xl shadow-sm border border-[#DCE3E8] p-8 space-y-6">
@@ -623,40 +587,30 @@ export default function StartupDetail({ onBack }: StartupDetailProps) {
                 <FileText className="w-5 h-5 text-[#274060]" />
                 Documents & Resources
               </h3>
-              
-              <div className="space-y-2">
-                <button className="w-full flex items-center justify-between p-3 border border-[#DCE3E8] rounded-lg hover:border-[#274060] hover:bg-[#F5F7FA] transition-colors duration-200 group">
-                  <div className="flex items-center gap-3">
-                    <Download className="w-4 h-4 text-[#274060]" />
-                    <span className="text-sm text-[#0F1720]">Pitch Deck</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#0F1720] opacity-40 group-hover:opacity-100" />
-                </button>
-                
-                <button className="w-full flex items-center justify-between p-3 border border-[#DCE3E8] rounded-lg hover:border-[#274060] hover:bg-[#F5F7FA] transition-colors duration-200 group">
-                  <div className="flex items-center gap-3">
-                    <Download className="w-4 h-4 text-[#274060]" />
-                    <span className="text-sm text-[#0F1720]">Financial Report</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#0F1720] opacity-40 group-hover:opacity-100" />
-                </button>
-                
-                <button className="w-full flex items-center justify-between p-3 border border-[#DCE3E8] rounded-lg hover:border-[#274060] hover:bg-[#F5F7FA] transition-colors duration-200 group">
-                  <div className="flex items-center gap-3">
-                    <Download className="w-4 h-4 text-[#274060]" />
-                    <span className="text-sm text-[#0F1720]">Business Plan</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#0F1720] opacity-40 group-hover:opacity-100" />
-                </button>
-                
-                <button className="w-full flex items-center justify-between p-3 border border-[#DCE3E8] rounded-lg hover:border-[#274060] hover:bg-[#F5F7FA] transition-colors duration-200 group">
-                  <div className="flex items-center gap-3">
-                    <Download className="w-4 h-4 text-[#274060]" />
-                    <span className="text-sm text-[#0F1720]">Legal Documents</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-[#0F1720] opacity-40 group-hover:opacity-100" />
-                </button>
-              </div>
+              {documents.length === 0 ? (
+                <p className="text-sm text-[#6B7A8C]">No documents uploaded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map(doc => (
+                    <a
+                      key={doc.id}
+                      href={doc.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-between p-3 border border-[#DCE3E8] rounded-lg hover:border-[#274060] hover:bg-[#F5F7FA] transition-colors duration-200 group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Download className="w-4 h-4 text-[#274060] flex-shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-sm text-[#0F1720] block truncate">{doc.title}</span>
+                          <span className="text-xs text-[#6B7A8C] capitalize">{doc.doc_type.replace('_', ' ')}</span>
+                        </div>
+                      </div>
+                      <ExternalLink className="w-4 h-4 text-[#0F1720] opacity-40 group-hover:opacity-100 flex-shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Risk Disclosure */}

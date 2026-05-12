@@ -73,7 +73,7 @@ export default function RegisterPage({
   const handleNext = async () => {
     setError(null);
 
-    // Step 4 -> 5: register the user, then send OTP
+    // Step 4 -> 5: send OTP FIRST (before registering)
     if (currentStep === 4) {
       if (!selectedRole) {
         setError("Please select a role to continue.");
@@ -81,14 +81,6 @@ export default function RegisterPage({
       }
       setLoading(true);
       try {
-        await authService.register({
-          email,
-          password,
-          first_name: firstName,
-          last_name: lastName,
-          role: selectedRole === "investor" ? "INVESTOR" : "FOUNDER",
-        });
-        // Send OTP after registration
         await authService.sendOtp(email);
         setOtpSent(true);
         setCurrentStep(5);
@@ -96,7 +88,7 @@ export default function RegisterPage({
         setError(
           err instanceof Error
             ? err.message
-            : "Registration failed. Please try again.",
+            : "Failed to send verification code.",
         );
       } finally {
         setLoading(false);
@@ -115,17 +107,34 @@ export default function RegisterPage({
       setError("Please enter the 6-digit verification code.");
       return;
     }
+    if (!selectedRole) {
+      setError("Please select a role.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
-      const res = await authService.verifyOtp(email, otp);
-      if (res.success) {
+      // Step 1: Verify OTP
+      const otpRes = await authService.verifyOtp(email, otp);
+      if (!otpRes.success) {
+        setError(otpRes.message || "Invalid verification code.");
+        return;
+      }
+      // Step 2: Register the user
+      const regRes = await authService.register({
+        email,
+        password,
+        first_name: firstName,
+        last_name: lastName,
+        role: selectedRole === "investor" ? "INVESTOR" : "FOUNDER",
+      });
+      if (regRes.success) {
         onNavigate?.("login");
       } else {
-        setError(res.message || "Invalid verification code. Please try again.");
+        setError(regRes.message || "Registration failed.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed.");
+      setError(err instanceof Error ? err.message : "Registration failed.");
     } finally {
       setLoading(false);
     }

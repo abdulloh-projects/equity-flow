@@ -28,6 +28,12 @@ export default function ChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    chatService.health().catch(() => {
+      // silently ignore – connectivity will show on first message attempt
+    });
+  }, []);
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || isLoading) return;
